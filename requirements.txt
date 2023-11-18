@@ -1,0 +1,5 @@
+asyncio
+psutil
+pypresence
+yandex_music
+winsdk
