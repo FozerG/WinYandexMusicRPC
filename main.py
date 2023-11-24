@@ -6,22 +6,27 @@ from enum import Enum
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
 from yandex_music import Client
 
+# Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
-name_prev = str()
-strong_find = True #Искать со 100% совпадением названия и автора трека. Иначе будет результат близкий который даст яндекс.
 
+# Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
+strong_find = True
+
+# Переменная для хранения предыдущего трека и избежания дублирования обновлений.
+name_prev = str()
+
+# Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
-    Unknown = 1
+    Unknown = 0,1
     Opened = 2
     Paused = 3
     Playing = 4
     Stopped = 5
 
-#получаем из winsdk информацию о мультимедиа
+# Асинхронная функция для получения информации о мультимедийном контенте через Windows SDK.
 async def get_media_info():
     sessions = await MediaManager.request_async()
     current_session = sessions.get_current_session()
-    # if current_session and current_session.source_app_user_model_id == "Chrome": #(if read only chrome media)
     if current_session:
         info = await current_session.try_get_media_properties_async()
         info_dict = {song_attr: info.__getattribute__(song_attr) for song_attr in dir(info) if song_attr[0] != '_'}
@@ -29,22 +34,22 @@ async def get_media_info():
         playback_status = PlaybackStatus(current_session.get_playback_info().playback_status)
         info_dict['playback_status'] = playback_status.name
         return info_dict
+    raise Exception('The music is not playing right now.')
 
-    raise Exception('Not have media now')
-
-
+# Класс для работы с Rich Presence в Discord.
 class Presence:
     def __init__(self) -> None:
-        self.token = "" #not needed
         self.client = None
         self.currentTrack = None
         self.rpc = None
         self.running = False
         self.paused = False
 
+    # Метод для запуска Rich Presence.
     def start(self) -> None:
         if "Discord.exe" not in (p.name() for p in psutil.process_iter()):
             print("[WinYandexMusicRPC] -> Discord is not launched")
+            WaitAndExit()
             return
 
         self.rpc = pypresence.Presence(client_id)
@@ -58,16 +63,16 @@ class Presence:
 
             if "Discord.exe" not in (p.name() for p in psutil.process_iter()):
                 print("[WinYandexMusicRPC] -> Discord was closed")
+                WaitAndExit()
                 return
 
             ongoing_track = self.getTrack()
 
             if self.currentTrack != ongoing_track:
-                print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
-
                 if ongoing_track['success']:
+                    print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
                     trackTime = currentTime
-                    remainingTime = ongoing_track['durationSec']-2 - (currentTime - trackTime)
+                    remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                     self.rpc.update(
                         details=ongoing_track['label'],
                         end=currentTime + remainingTime,
@@ -77,17 +82,18 @@ class Presence:
                     )
                 else:
                     self.rpc.clear()
+                    print(f"[WinYandexMusicRPC] -> Clear RPC")
 
                 self.currentTrack = ongoing_track
 
             else:
                 if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not self.paused:
                     self.paused = True
-                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} paused.")
+                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} on pause")
 
                     if ongoing_track['success']:
                         trackTime = currentTime
-                        remainingTime = ongoing_track['durationSec']-2 - (currentTime - trackTime)
+                        remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                         self.rpc.update(
                             details=ongoing_track['label'],
                             state="На паузе",
@@ -97,11 +103,11 @@ class Presence:
                         )
 
                 elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
-                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} unpaused.")
+                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} off pause.")
                     self.paused = False
             time.sleep(3)
 
-
+    # Метод для получения информации о текущем треке.
     def getTrack(self) -> dict:
         try:
             current_media_info = asyncio.run(get_media_info())
@@ -109,42 +115,31 @@ class Presence:
             global name_prev
             global strong_find
             if str(name_current) != name_prev:
-                print("[WinYandexMusicRPC] -> Now listen: "+ name_current)
+                print("[WinYandexMusicRPC] -> Now listen: " + name_current)
+            else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы.
+                self.currentTrack["playback"] = current_media_info['playback_status']
+                return self.currentTrack
 
             name_prev = str(name_current)
-            search = self.client.search(name_current)
+            search = self.client.search(name_current, True, "all", 0, False)
 
             if not search.best:
-                print(f"[WinYandexMusicRPC] -> cant find music: {name_current}")
-                return {
-                    'success': False,
-                    'label': "No track / Uploaded track",
-                    'duration': "Duration: None",
-                    'link': "",
-                    'og-image': "og-image"
-                }
-            if  search.best.type not in ['music', 'track', 'podcast_episode']:
-                print(f"[WinYandexMusicRPC] -> cant find track: {name_current}, best result is not music")
-                return {
-                    'success': False,
-                    'label': "No track / Uploaded track",
-                    'duration': "Duration: None",
-                    'link': "",
-                    'og-image': "og-image"
-                }
+                print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}")
+                return {'success': False}
+            if search.best.type not in ['music', 'track', 'podcast_episode']:
+                print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}, the best result has the wrong type")
+                return {'success': False}
 
-            findTrackName = ', '.join([str(elem) for elem in search.best.result.artists_name() ]) + " - " + search.best.result.title
-            findTrackName2 = ', '.join([str(elem) for elem in search.best.result.artists_name()[::-1]]) + " - " + search.best.result.title #Меняем местами авторов на всякий случай
-            
+            findTrackName = ', '.join([str(elem) for elem in search.best.result.artists_name()]) + " - " + \
+                             search.best.result.title
+            findTrackName2 = ', '.join([str(elem) for elem in search.best.result.artists_name()[::-1]]) + " - " + \
+                              search.best.result.title  # Меняем местами авторов на всякий случай
+
             if strong_find and findTrackName != name_current and findTrackName2 != name_current:
-                print(f"[WinYandexMusicRPC] -> cant find music (strong_find). Now play: {name_current}. But we find: {findTrackName}")
-                return {
-                    'success': False,
-                    'label': "No track / Uploaded track",
-                    'duration': "Duration: None",
-                    'link': "",
-                    'og-image': "og-image"
-                }
+                print(f"[WinYandexMusicRPC] -> Cant find the song (strong_find). Now play: {name_current}. But we find: {findTrackName}")
+                return {'success': False}
+                    
+               
 
             track = search.best.result
             trackId = track.trackId.split(":")
@@ -155,22 +150,19 @@ class Presence:
                     'label': f"{', '.join(track.artists_name())} - {track.title}",
                     'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
-                    'durationSec': track.duration_ms// 1000,
+                    'durationSec': track.duration_ms // 1000,
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
 
         except Exception as exception:
             print(f"[WinYandexMusicRPC] -> Something happened: {exception}")
-            return {
-                'success': False,
-                'label': "No track / Uploaded track",
-                'duration': "Duration: None",
-                'link': "",
-                'og-image': "og-image"
-            }
+            return {'success': False}
 
-        
+def WaitAndExit():
+    time.sleep(3)
+    exit
+
 if __name__ == '__main__':
     presence = Presence()
     presence.start()
