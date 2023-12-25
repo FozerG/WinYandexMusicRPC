@@ -5,7 +5,7 @@ import time
 from enum import Enum
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
 from yandex_music import Client
-
+from itertools import permutations
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
 
@@ -68,9 +68,14 @@ class Presence:
 
             ongoing_track = self.getTrack()
 
-            if self.currentTrack != ongoing_track:
-                if ongoing_track['success']:
-                    print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
+            if self.currentTrack != ongoing_track :
+                if ongoing_track['success']: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
+                    if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
+                        if ongoing_track['label'] != self.currentTrack['label']: 
+                            print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
+                    else:
+                        print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
+
                     trackTime = currentTime
                     remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                     self.rpc.update(
@@ -117,8 +122,9 @@ class Presence:
             if str(name_current) != name_prev:
                 print("[WinYandexMusicRPC] -> Now listen: " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы.
-                self.currentTrack["playback"] = current_media_info['playback_status']
-                return self.currentTrack
+                currentTrack_copy = self.currentTrack.copy()
+                currentTrack_copy["playback"] = current_media_info['playback_status']
+                return currentTrack_copy
 
             name_prev = str(name_current)
             search = self.client.search(name_current, True, "all", 0, False)
@@ -129,17 +135,23 @@ class Presence:
             if search.best.type not in ['music', 'track', 'podcast_episode']:
                 print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}, the best result has the wrong type")
                 return {'success': False}
-
             findTrackName = ', '.join([str(elem) for elem in search.best.result.artists_name()]) + " - " + \
                              search.best.result.title
-            findTrackName2 = ', '.join([str(elem) for elem in search.best.result.artists_name()[::-1]]) + " - " + \
-                              search.best.result.title  # Меняем местами авторов на всякий случай
 
-            if strong_find and findTrackName != name_current and findTrackName2 != name_current:
+            # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
+            artists = search.best.result.artists_name()
+            all_variants = list(permutations(artists))
+            all_variants = [list(variant) for variant in all_variants]
+            findTrackNames = []
+            for variant in all_variants:
+                findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + search.best.result.title)
+            # Также может отличаться регистр, так что приведём всё в один регистр.    
+            boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
+
+            if strong_find and not boolNameCorrect:
                 print(f"[WinYandexMusicRPC] -> Cant find the song (strong_find). Now play: {name_current}. But we find: {findTrackName}")
                 return {'success': False}
                     
-               
 
             track = search.best.result
             trackId = track.trackId.split(":")
