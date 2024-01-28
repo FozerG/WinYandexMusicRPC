@@ -6,6 +6,7 @@ from enum import Enum
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
 from yandex_music import Client
 from itertools import permutations
+import psutil
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
 
@@ -17,7 +18,8 @@ name_prev = str()
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
-    Unknown = 0,1
+    Unknown = 0
+    Closed = 1
     Opened = 2
     Paused = 3
     Playing = 4
@@ -38,6 +40,7 @@ async def get_media_info():
 
 # Класс для работы с Rich Presence в Discord.
 class Presence:
+
     def __init__(self) -> None:
         self.client = None
         self.currentTrack = None
@@ -47,7 +50,8 @@ class Presence:
 
     # Метод для запуска Rich Presence.
     def start(self) -> None:
-        if "Discord.exe" not in (p.name() for p in psutil.process_iter()):
+        exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
+        if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
             print("[WinYandexMusicRPC] -> Discord is not launched")
             WaitAndExit()
             return
@@ -61,7 +65,7 @@ class Presence:
         while self.running:
             currentTime = time.time()
 
-            if "Discord.exe" not in (p.name() for p in psutil.process_iter()):
+            if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
                 print("[WinYandexMusicRPC] -> Discord was closed")
                 WaitAndExit()
                 return
@@ -172,8 +176,7 @@ class Presence:
             return {'success': False}
 
 def WaitAndExit():
-    time.sleep(3)
-    exit
+    input("Press Enter to close the program.")
 
 if __name__ == '__main__':
     presence = Presence()
