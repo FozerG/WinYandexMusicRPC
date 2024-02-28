@@ -83,11 +83,12 @@ class Presence:
                     trackTime = currentTime
                     remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                     self.rpc.update(
-                        details=ongoing_track['label'],
+                        details=ongoing_track['title'],
+                        state=ongoing_track['artist'],
                         end=currentTime + remainingTime,
                         large_image=ongoing_track['og-image'],
-                        large_text='Яндекс Музыка',
-                        buttons=[{'label': 'Слушать', 'url': ongoing_track['link']}]
+                        large_text=ongoing_track['album'],
+                        buttons=[{'label': 'Слушать на Яндекс.Музыке', 'url': ongoing_track['link']}]
                     )
                 else:
                     self.rpc.clear()
@@ -104,11 +105,13 @@ class Presence:
                         trackTime = currentTime
                         remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                         self.rpc.update(
-                            details=ongoing_track['label'],
-                            state="На паузе",
+                            details=ongoing_track['title'],
+                            state=ongoing_track['artist'],
                             large_image=ongoing_track['og-image'],
-                            large_text='Яндекс Музыка',
-                            buttons=[{'label': 'Слушать', 'url': ongoing_track['link']}]
+                            large_text=ongoing_track['album'],
+                            buttons=[{'label': 'Слушать на Яндекс.Музыке', 'url': ongoing_track['link']}],
+                            small_image="https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
+                            small_text="На паузе"
                         )
 
                 elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
@@ -124,7 +127,7 @@ class Presence:
             global name_prev
             global strong_find
             if str(name_current) != name_prev:
-                print("[WinYandexMusicRPC] -> Now listen: " + name_current)
+                print("[WinYandexMusicRPC] -> Now listening to " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы.
                 currentTrack_copy = self.currentTrack.copy()
                 currentTrack_copy["playback"] = current_media_info['playback_status']
@@ -163,6 +166,9 @@ class Presence:
             if track:
                 return {
                     'success': True,
+                    'title': track.title,
+                    'artist': f"{', '.join(track.artists_name())}",
+                    'album': track.albums[0].title,
                     'label': f"{', '.join(track.artists_name())} - {track.title}",
                     'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
