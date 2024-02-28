@@ -110,7 +110,7 @@ class Presence:
                             large_image=ongoing_track['og-image'],
                             large_text=ongoing_track['album'],
                             buttons=[{'label': 'Слушать на Яндекс.Музыке', 'url': ongoing_track['link']}],
-                            small_image="https://raw.githubusercontent.com/mctaylors/WinYandexMusicRPC/main/assets/pause.png",
+                            small_image="https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
                             small_text="На паузе"
                         )
 
