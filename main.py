@@ -7,8 +7,12 @@ from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessi
 from yandex_music import Client
 from itertools import permutations
 import psutil
+import requests
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
+
+# Версия(tag) скрипта для проверки на актуальность через Github Releases
+current_version = "v1.5"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
@@ -47,6 +51,8 @@ class Presence:
         self.rpc = None
         self.running = False
         self.paused = False
+        self.paused_time = 0 
+
 
     # Метод для запуска Rich Presence.
     def start(self) -> None:
@@ -55,6 +61,9 @@ class Presence:
             print("[WinYandexMusicRPC] -> Discord is not launched")
             WaitAndExit()
             return
+        
+        print("[WinYandexMusicRPC] -> Launched. Check the actual version...")
+        GetLastVersion('https://github.com/FozerG/WinYandexMusicRPC')
 
         self.rpc = pypresence.Presence(client_id)
         self.rpc.connect()
@@ -72,14 +81,14 @@ class Presence:
 
             ongoing_track = self.getTrack()
 
-            if self.currentTrack != ongoing_track :
-                if ongoing_track['success']: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
+            if self.currentTrack != ongoing_track : # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
+                if ongoing_track['success']: 
                     if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
                         if ongoing_track['label'] != self.currentTrack['label']: 
                             print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
                     else:
                         print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
-
+                    self.paused_time = 0
                     trackTime = currentTime
                     remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                     self.rpc.update(
@@ -96,7 +105,7 @@ class Presence:
 
                 self.currentTrack = ongoing_track
 
-            else:
+            else: #Песня не новая, проверяем статус паузы
                 if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not self.paused:
                     self.paused = True
                     print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} on pause")
@@ -117,6 +126,16 @@ class Presence:
                 elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
                     print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} off pause.")
                     self.paused = False
+
+                elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and self.paused and trackTime != 0:
+                    self.paused_time = currentTime - trackTime
+                    if self.paused_time > 5 * 60:  # если пауза больше 5 минут
+                        trackTime = 0
+                        self.rpc.clear()
+                        print(f"[WinYandexMusicRPC] -> Clear RPC due to paused for more than 5 minutes")
+                else:
+                    self.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
+
             time.sleep(3)
 
     # Метод для получения информации о текущем треке.
@@ -169,7 +188,7 @@ class Presence:
                     'title': track.title,
                     'artist': TrimString(f"{', '.join(track.artists_name())}",40),
                     'album': TrimString(track.albums[0].title,25),
-                    'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",40),
+                    'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
                     'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
                     'durationSec': track.duration_ms // 1000,
@@ -190,6 +209,21 @@ def TrimString(string, maxChars):
         return string[:maxChars] + "..."
     else:
         return string
+    
+def GetLastVersion(repoUrl):
+    try:
+        global current_version
+        response = requests.get(repoUrl + '/releases/latest')
+        response.raise_for_status()
+        latest_version = response.url.split('/')[-1]
+        if current_version != latest_version:
+            print(f"[WinYandexMusicRPC] -> A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}")
+        else:
+            print(f"[WinYandexMusicRPC] -> You are using the latest version of the script")
+        
+    except requests.exceptions.RequestException as e:
+        print("[WinYandexMusicRPC] -> Error getting latest version:", e)
+
 
 if __name__ == '__main__':
     presence = Presence()
