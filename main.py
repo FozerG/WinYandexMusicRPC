@@ -167,9 +167,9 @@ class Presence:
                 return {
                     'success': True,
                     'title': track.title,
-                    'artist': f"{', '.join(track.artists_name())}",
-                    'album': track.albums[0].title,
-                    'label': f"{', '.join(track.artists_name())} - {track.title}",
+                    'artist': TrimString(f"{', '.join(track.artists_name())}",40),
+                    'album': TrimString(track.albums[0].title,25),
+                    'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",40),
                     'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
                     'durationSec': track.duration_ms // 1000,
@@ -184,6 +184,14 @@ class Presence:
 def WaitAndExit():
     input("Press Enter to close the program.")
 
+
+def TrimString(string, maxChars):
+    if len(string) > maxChars:
+        return string[:maxChars] + "..."
+    else:
+        return string
+
 if __name__ == '__main__':
     presence = Presence()
     presence.start()
+
