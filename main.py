@@ -12,7 +12,7 @@ import requests
 client_id = '978995592736944188'
 
 # Версия(tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.5"
+current_version = "v1.6"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
@@ -97,8 +97,10 @@ class Presence:
                         end=currentTime + remainingTime,
                         large_image=ongoing_track['og-image'],
                         large_text=ongoing_track['album'],
-                        buttons=[{'label': 'Слушать на Яндекс.Музыке', 'url': ongoing_track['link']}]
+                        buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}] #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
+                                                                                            #Если превысить лимит то Discord RPC не будет виден другим пользователям.
                     )
+
                 else:
                     self.rpc.clear()
                     print(f"[WinYandexMusicRPC] -> Clear RPC")
@@ -118,7 +120,8 @@ class Presence:
                             state=ongoing_track['artist'],
                             large_image=ongoing_track['og-image'],
                             large_text=ongoing_track['album'],
-                            buttons=[{'label': 'Слушать на Яндекс.Музыке', 'url': ongoing_track['link']}],
+                            buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}], #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
+                                                                                                    #Если превысить лимит то Discord RPC не будет виден другим пользователям.
                             small_image="https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
                             small_text="На паузе"
                         )
@@ -155,37 +158,46 @@ class Presence:
             name_prev = str(name_current)
             search = self.client.search(name_current, True, "all", 0, False)
 
-            if not search.best:
+            if search.tracks == None:
                 print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}")
                 return {'success': False}
-            if search.best.type not in ['music', 'track', 'podcast_episode']:
-                print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}, the best result has the wrong type")
+            
+            finalTrack = None
+            debugStr = []
+            for index, trackFromSearch in enumerate(search.tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
+                if trackFromSearch.type not in ['music', 'track', 'podcast_episode']:
+                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong type.")
+                
+                # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
+                artists = trackFromSearch.artists_name()
+                all_variants = list(permutations(artists))
+                all_variants = [list(variant) for variant in all_variants]
+                findTrackNames = []
+                for variant in all_variants:
+                    findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
+                # Также может отличаться регистр, так что приведём всё в один регистр.    
+                boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
+
+                if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
+                    findTrackName = ', '.join([str(elem) for elem in trackFromSearch.artists_name()]) + " - " + trackFromSearch.title
+                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong title. Now play: {name_current}. But we find: {findTrackName}")
+                    continue
+                else: #иначе трек найден
+                    finalTrack = trackFromSearch
+                    break
+
+            if finalTrack == None:
+                print('\n'.join(debugStr))
+                print(f"[WinYandexMusicRPC] -> Can't find the song (strong_find): {name_current}")
                 return {'success': False}
-            findTrackName = ', '.join([str(elem) for elem in search.best.result.artists_name()]) + " - " + \
-                             search.best.result.title
 
-            # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
-            artists = search.best.result.artists_name()
-            all_variants = list(permutations(artists))
-            all_variants = [list(variant) for variant in all_variants]
-            findTrackNames = []
-            for variant in all_variants:
-                findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + search.best.result.title)
-            # Также может отличаться регистр, так что приведём всё в один регистр.    
-            boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
-
-            if strong_find and not boolNameCorrect:
-                print(f"[WinYandexMusicRPC] -> Cant find the song (strong_find). Now play: {name_current}. But we find: {findTrackName}")
-                return {'success': False}
-                    
-
-            track = search.best.result
+            track = finalTrack
             trackId = track.trackId.split(":")
 
             if track:
                 return {
                     'success': True,
-                    'title': track.title,
+                    'title': TrimString(track.title, 40),
                     'artist': TrimString(f"{', '.join(track.artists_name())}",40),
                     'album': TrimString(track.albums[0].title,25),
                     'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
