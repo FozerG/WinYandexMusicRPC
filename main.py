@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 import psutil
 import pypresence
 import time
@@ -12,7 +13,7 @@ import requests
 client_id = '978995592736944188'
 
 # Версия(tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.6"
+current_version = "v1.7"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
@@ -29,6 +30,16 @@ class PlaybackStatus(Enum):
     Playing = 4
     Stopped = 5
 
+# Асинхронная функция для получения информации о стартовой позиции начала трека
+async def get_timeline_position():
+    sessions = await MediaManager.request_async()
+    current_session = sessions.get_current_session()
+    if current_session:
+        position = current_session.get_timeline_properties().position
+        return position
+    else:
+        return timedelta(seconds=0)
+        
 # Асинхронная функция для получения информации о мультимедийном контенте через Windows SDK.
 async def get_media_info():
     sessions = await MediaManager.request_async()
@@ -61,10 +72,9 @@ class Presence:
             print("[WinYandexMusicRPC] -> Discord is not launched")
             WaitAndExit()
             return
-        
+
         print("[WinYandexMusicRPC] -> Launched. Check the actual version...")
         GetLastVersion('https://github.com/FozerG/WinYandexMusicRPC')
-
         self.rpc = pypresence.Presence(client_id)
         self.rpc.connect()
         self.client = Client().init()
@@ -80,7 +90,6 @@ class Presence:
                 return
 
             ongoing_track = self.getTrack()
-
             if self.currentTrack != ongoing_track : # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
                 if ongoing_track['success']: 
                     if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
@@ -90,17 +99,17 @@ class Presence:
                         print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
                     self.paused_time = 0
                     trackTime = currentTime
-                    remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
+                    remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
                     self.rpc.update(
                         details=ongoing_track['title'],
                         state=ongoing_track['artist'],
                         end=currentTime + remainingTime,
                         large_image=ongoing_track['og-image'],
                         large_text=ongoing_track['album'],
+
                         buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}] #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
                                                                                             #Если превысить лимит то Discord RPC не будет виден другим пользователям.
                     )
-
                 else:
                     self.rpc.clear()
                     print(f"[WinYandexMusicRPC] -> Clear RPC")
@@ -113,8 +122,6 @@ class Presence:
                     print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} on pause")
 
                     if ongoing_track['success']:
-                        trackTime = currentTime
-                        remainingTime = ongoing_track['durationSec'] - 2 - (currentTime - trackTime)
                         self.rpc.update(
                             details=ongoing_track['title'],
                             state=ongoing_track['artist'],
@@ -148,10 +155,15 @@ class Presence:
             name_current = current_media_info["artist"] + " - " + current_media_info["title"]
             global name_prev
             global strong_find
+            if str(name_current) == " - ":
+                print("[WinYandexMusicRPC] -> Winsdk returned empty string")
+                {'success': False}
             if str(name_current) != name_prev:
                 print("[WinYandexMusicRPC] -> Now listening to " + name_current)
-            else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы.
+            else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
                 currentTrack_copy = self.currentTrack.copy()
+                position = asyncio.run(get_timeline_position())
+                currentTrack_copy["start-time"] = position
                 currentTrack_copy["playback"] = current_media_info['playback_status']
                 return currentTrack_copy
 
@@ -193,7 +205,7 @@ class Presence:
 
             track = finalTrack
             trackId = track.trackId.split(":")
-
+            startTime = asyncio.run(get_timeline_position())
             if track:
                 return {
                     'success': True,
@@ -204,6 +216,7 @@ class Presence:
                     'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
                     'durationSec': track.duration_ms // 1000,
+                    'start-time': startTime,
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
