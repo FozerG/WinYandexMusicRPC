@@ -242,7 +242,7 @@ def GetLastVersion(repoUrl):
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
         if current_version != latest_version:
-            print(f"[WinYandexMusicRPC] -> A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}")
+            print(f"[WinYandexMusicRPC] -> A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
         else:
             print(f"[WinYandexMusicRPC] -> You are using the latest version of the script")
         
