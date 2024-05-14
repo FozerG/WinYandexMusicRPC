@@ -10,6 +10,7 @@ from itertools import permutations
 import psutil
 import requests
 import os
+import sys
 import signal
 import webbrowser
 
@@ -32,7 +33,8 @@ strong_find = True
 name_prev = str()
 
 # Иконка для трея
-tray_image = Image.open("assets/tray.png")
+resources_path = sys._MEIPASS
+tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
 # Ссылка на репо
 repo_url = "https://github.com/eggdll/WinYandexMusicRPC"
