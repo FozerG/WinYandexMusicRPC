@@ -24,7 +24,7 @@ import win32gui, win32con
 client_id = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.8.1"
+current_version = "v1.8.2"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
@@ -49,7 +49,7 @@ class PlaybackStatus(Enum):
     Stopped = 5
     
 def log(text):
-    print("\033[94m[WinYandexMusicRPC] \033[0m-> {}".format(text))
+    print("[WinYandexMusicRPC] -> {}".format(text))
 
 log("Minimizing to tray in 1 second.")
 
