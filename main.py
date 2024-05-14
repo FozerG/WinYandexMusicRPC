@@ -53,9 +53,11 @@ def log(text):
 
 log("Minimizing to tray in 1 second.")
 
+# Необходимо захватить окно как можно скорее, иначе может закрыться другое
+window = win32gui.GetForegroundWindow()
+
 time.sleep(1)
 
-window = win32gui.GetForegroundWindow()
 win32gui.ShowWindow(window, win32con.SW_HIDE)
 
 # Действия для кнопок
