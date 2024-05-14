@@ -37,7 +37,7 @@ resources_path = sys._MEIPASS
 tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
 # Ссылка на репо
-repo_url = "https://github.com/eggdll/WinYandexMusicRPC"
+repo_url = "https://github.com/FozerG/WinYandexMusicRPC"
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
