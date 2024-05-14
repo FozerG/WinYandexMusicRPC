@@ -24,7 +24,7 @@ import win32gui, win32con
 client_id = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.8"
+current_version = "v1.8.1"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
