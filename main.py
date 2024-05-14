@@ -285,8 +285,7 @@ class Presence:
         win32gui.ShowWindow(window, win32con.SW_SHOW)
         log("Something bad happened in the presence class!")
         log(f"More info: {exception}")
-        time.sleep(5)
-        os.kill(os.getpid(), signal.SIGILL)
+        WaitAndExit()
 
 def WaitAndExit():
     input("Press Enter to close the program.")
