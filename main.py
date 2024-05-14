@@ -9,17 +9,33 @@ from yandex_music import Client
 from itertools import permutations
 import psutil
 import requests
+import os
+import signal
+import webbrowser
+
+# Трей
+import pystray
+from PIL import Image
+import threading
+import win32gui, win32con
+
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
 
 # Версия(tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.7"
+current_version = "v1.8"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
 
 # Переменная для хранения предыдущего трека и избежания дублирования обновлений.
 name_prev = str()
+
+# Иконка для трея
+tray_image = Image.open("assets/tray.png")
+
+# Ссылка на репо
+repo_url = "https://github.com/eggdll/WinYandexMusicRPC"
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -29,6 +45,44 @@ class PlaybackStatus(Enum):
     Paused = 3
     Playing = 4
     Stopped = 5
+    
+def log(text):
+    print("\033[94m[WinYandexMusicRPC] \033[0m-> {}".format(text))
+
+log("Minimizing to tray in 1 second.")
+
+time.sleep(1)
+
+window = win32gui.GetForegroundWindow()
+win32gui.ShowWindow(window, win32con.SW_HIDE)
+
+# Действия для кнопок
+def tray_click(icon, query):
+    match str(query):
+        case "GitHub":
+            webbrowser.open(repo_url,  new=2)
+
+        case "Show Console":
+            win32gui.ShowWindow(window, win32con.SW_SHOW)
+
+        case "Hide Console":
+            win32gui.ShowWindow(window, win32con.SW_HIDE)
+
+        case "Exit":
+            icon.stop()
+            os.kill(os.getpid(), signal.SIGILL)
+
+def tray_thread():
+    tray_icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
+        pystray.MenuItem("GitHub", tray_click),
+        pystray.MenuItem("Show Console", tray_click),
+        pystray.MenuItem("Hide Console", tray_click),
+        pystray.MenuItem("Exit", tray_click)))
+
+    tray_icon.run()
+
+tray_thread = threading.Thread(target=tray_thread)
+tray_thread.start()
 
 # Асинхронная функция для получения информации о стартовой позиции начала трека
 async def get_timeline_position():
@@ -69,12 +123,12 @@ class Presence:
     def start(self) -> None:
         exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
         if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
-            print("[WinYandexMusicRPC] -> Discord is not launched")
+            log("Discord is not launched")
             WaitAndExit()
             return
 
-        print("[WinYandexMusicRPC] -> Launched. Check the actual version...")
-        GetLastVersion('https://github.com/FozerG/WinYandexMusicRPC')
+        log("Launched. Check the actual version...")
+        GetLastVersion(repo_url)
         self.rpc = pypresence.Presence(client_id)
         self.rpc.connect()
         self.client = Client().init()
@@ -85,7 +139,7 @@ class Presence:
             currentTime = time.time()
 
             if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
-                print("[WinYandexMusicRPC] -> Discord was closed")
+                log("Discord was closed")
                 WaitAndExit()
                 return
 
@@ -94,9 +148,9 @@ class Presence:
                 if ongoing_track['success']: 
                     if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
                         if ongoing_track['label'] != self.currentTrack['label']: 
-                            print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
+                            log(f"Changed track to {ongoing_track['label']}")
                     else:
-                        print(f"[WinYandexMusicRPC] -> Changed track to {ongoing_track['label']}")
+                        log(f"Changed track to {ongoing_track['label']}")
                     self.paused_time = 0
                     trackTime = currentTime
                     remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
@@ -112,14 +166,14 @@ class Presence:
                     )
                 else:
                     self.rpc.clear()
-                    print(f"[WinYandexMusicRPC] -> Clear RPC")
+                    log(f"Clear RPC")
 
                 self.currentTrack = ongoing_track
 
             else: #Песня не новая, проверяем статус паузы
                 if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not self.paused:
                     self.paused = True
-                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} on pause")
+                    log(f"Track {ongoing_track['label']} on pause")
 
                     if ongoing_track['success']:
                         self.rpc.update(
@@ -134,7 +188,7 @@ class Presence:
                         )
 
                 elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
-                    print(f"[WinYandexMusicRPC] -> Track {ongoing_track['label']} off pause.")
+                    log(f"Track {ongoing_track['label']} off pause.")
                     self.paused = False
 
                 elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and self.paused and trackTime != 0:
@@ -142,7 +196,7 @@ class Presence:
                     if self.paused_time > 5 * 60:  # если пауза больше 5 минут
                         trackTime = 0
                         self.rpc.clear()
-                        print(f"[WinYandexMusicRPC] -> Clear RPC due to paused for more than 5 minutes")
+                        log(f"Clear RPC due to paused for more than 5 minutes")
                 else:
                     self.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
 
@@ -156,10 +210,10 @@ class Presence:
             global name_prev
             global strong_find
             if str(name_current) == " - ":
-                print("[WinYandexMusicRPC] -> Winsdk returned empty string")
+                log("Winsdk returned empty string")
                 {'success': False}
             if str(name_current) != name_prev:
-                print("[WinYandexMusicRPC] -> Now listening to " + name_current)
+                log("Now listening to " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
                 currentTrack_copy = self.currentTrack.copy()
                 position = asyncio.run(get_timeline_position())
@@ -171,7 +225,7 @@ class Presence:
             search = self.client.search(name_current, True, "all", 0, False)
 
             if search.tracks == None:
-                print(f"[WinYandexMusicRPC] -> Can't find the song: {name_current}")
+                log(f"Can't find the song: {name_current}")
                 return {'success': False}
             
             finalTrack = None
@@ -200,7 +254,7 @@ class Presence:
 
             if finalTrack == None:
                 print('\n'.join(debugStr))
-                print(f"[WinYandexMusicRPC] -> Can't find the song (strong_find): {name_current}")
+                log(f"Can't find the song (strong_find): {name_current}")
                 return {'success': False}
 
             track = finalTrack
@@ -222,7 +276,7 @@ class Presence:
                 }
 
         except Exception as exception:
-            print(f"[WinYandexMusicRPC] -> Something happened: {exception}")
+            log(f"Something happened: {exception}")
             return {'success': False}
 
 def WaitAndExit():
@@ -242,15 +296,13 @@ def GetLastVersion(repoUrl):
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
         if current_version != latest_version:
-            print(f"[WinYandexMusicRPC] -> A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
+            log(f"A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
         else:
-            print(f"[WinYandexMusicRPC] -> You are using the latest version of the script")
+            log(f"You are using the latest version of the script")
         
     except requests.exceptions.RequestException as e:
-        print("[WinYandexMusicRPC] -> Error getting latest version:", e)
-
+        log("Error getting latest version:", e)
 
 if __name__ == '__main__':
     presence = Presence()
     presence.start()
-

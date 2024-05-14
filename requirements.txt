@@ -3,3 +3,6 @@ psutil
 pypresence
 yandex_music
 winsdk
+pillow
+pystray
+pywin32
