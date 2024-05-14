@@ -13,18 +13,17 @@ import os
 import sys
 import signal
 import webbrowser
-
-# Трей
 import pystray
 from PIL import Image
 import threading
 import win32gui, win32con
+import ctypes
 
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.8.2"
+current_version = "v1.8.4"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
@@ -51,9 +50,12 @@ class PlaybackStatus(Enum):
 def log(text):
     print("[WinYandexMusicRPC] -> {}".format(text))
 
-log("Minimizing to tray in 1 second.")
+log("Minimizing to tray in 1 second. Please DO NOT focus on any other apps until this window closes.")
+
+ctypes.windll.kernel32.SetConsoleTitleW("WinYandexMusicRPC")
 
 # Необходимо захватить окно как можно скорее, иначе может закрыться другое
+# TODO: найти метод получше
 window = win32gui.GetForegroundWindow()
 
 time.sleep(1)
