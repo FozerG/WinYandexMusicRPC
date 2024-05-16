@@ -105,7 +105,7 @@ class Presence:
                     if ongoing_track['success']: 
                         if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
                             if ongoing_track['label'] != self.currentTrack['label']: 
-                                log(f"Changed track to {ongoing_track['label']}")
+                                log(f"Changed track to {ongoing_track['label']}",3)
                         else:
                             log(f"Changed track to {ongoing_track['label']}",3)
                         self.paused_time = 0
