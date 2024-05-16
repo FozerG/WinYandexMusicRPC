@@ -16,6 +16,7 @@ from PIL import Image
 import threading
 import win32gui, win32con, win32console
 import subprocess
+from colorama import init, Fore, Style
 
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID = '978995592736944188'
@@ -106,7 +107,7 @@ class Presence:
                             if ongoing_track['label'] != self.currentTrack['label']: 
                                 log(f"Changed track to {ongoing_track['label']}")
                         else:
-                            log(f"Changed track to {ongoing_track['label']}")
+                            log(f"Changed track to {ongoing_track['label']}",3)
                         self.paused_time = 0
                         trackTime = currentTime
                         remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
@@ -232,7 +233,7 @@ class Presence:
                     }
 
             except Exception as exception:
-                log(f"Something happened: {exception}")        
+                log(f"Something happened: {exception}", 2)        
                 win32gui.ShowWindow(window, win32con.SW_SHOW)
                 WaitAndExit()
                 return {'success': False}
@@ -248,8 +249,24 @@ def TrimString(string, maxChars):
     else:
         return string
     
-def log(text):
-    print("[WinYandexMusicRPC] -> {}".format(text))
+def log(text, code=0):
+    init()
+    # Цвета текста
+    red_text = Fore.RED
+    yellow_text = Fore.YELLOW
+    blue_text = Fore.CYAN
+    reset_text = Style.RESET_ALL
+
+    if code == 1:
+        message_color = yellow_text
+    elif code == 2:
+        message_color = red_text
+    elif code == 3:
+        message_color = blue_text
+    else:
+        message_color = reset_text
+
+    print(f"{red_text}[WinYandexMusicRPC] -> {message_color}{text}{reset_text}")
 
 def GetLastVersion(repoUrl):
     try:
@@ -258,12 +275,12 @@ def GetLastVersion(repoUrl):
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
         if CURRENT_VERSION != latest_version:
-            log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
+            log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}", 1)
         else:
             log(f"You are using the latest version of the script")
         
     except requests.exceptions.RequestException as e:
-        log("Error getting latest version:", e)
+        log("Error getting latest version: {e}", 2)
 
 
 # Функция для переключения состояния strong_find
