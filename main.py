@@ -16,24 +16,20 @@ import webbrowser
 import pystray
 from PIL import Image
 import threading
-import win32gui, win32con
-import ctypes
+import win32gui, win32con, win32console
+import subprocess
 
 # Идентификатор клиента Discord для Rich Presence
 client_id = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.8.4"
+current_version = "v1.8.5"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
 
 # Переменная для хранения предыдущего трека и избежания дублирования обновлений.
 name_prev = str()
-
-# Иконка для трея
-resources_path = sys._MEIPASS
-tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
 # Ссылка на репо
 repo_url = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -46,49 +42,6 @@ class PlaybackStatus(Enum):
     Paused = 3
     Playing = 4
     Stopped = 5
-    
-def log(text):
-    print("[WinYandexMusicRPC] -> {}".format(text))
-
-log("Minimizing to tray in 1 second. Please DO NOT focus on any other apps until this window closes.")
-
-ctypes.windll.kernel32.SetConsoleTitleW("WinYandexMusicRPC")
-
-# Необходимо захватить окно как можно скорее, иначе может закрыться другое
-# TODO: найти метод получше
-window = win32gui.GetForegroundWindow()
-
-time.sleep(1)
-
-win32gui.ShowWindow(window, win32con.SW_HIDE)
-
-# Действия для кнопок
-def tray_click(icon, query):
-    match str(query):
-        case "GitHub":
-            webbrowser.open(repo_url,  new=2)
-
-        case "Show Console":
-            win32gui.ShowWindow(window, win32con.SW_SHOW)
-
-        case "Hide Console":
-            win32gui.ShowWindow(window, win32con.SW_HIDE)
-
-        case "Exit":
-            icon.stop()
-            os.kill(os.getpid(), signal.SIGILL)
-
-def tray_thread():
-    tray_icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
-        pystray.MenuItem("GitHub", tray_click),
-        pystray.MenuItem("Show Console", tray_click),
-        pystray.MenuItem("Hide Console", tray_click),
-        pystray.MenuItem("Exit", tray_click)))
-
-    tray_icon.run()
-
-tray_thread = threading.Thread(target=tray_thread)
-tray_thread.start()
 
 # Асинхронная функция для получения информации о стартовой позиции начала трека
 async def get_timeline_position():
@@ -115,7 +68,6 @@ async def get_media_info():
 
 # Класс для работы с Rich Presence в Discord.
 class Presence:
-    try:
         def __init__(self) -> None:
             self.client = None
             self.currentTrack = None
@@ -282,17 +234,15 @@ class Presence:
                     }
 
             except Exception as exception:
-                log(f"Something happened: {exception}")
+                log(f"Something happened: {exception}")        
+                win32gui.ShowWindow(window, win32con.SW_SHOW)
+                WaitAndExit()
                 return {'success': False}
-
-    except Exception as exception:
-        win32gui.ShowWindow(window, win32con.SW_SHOW)
-        log("Something bad happened in the presence class!")
-        log(f"More info: {exception}")
-        WaitAndExit()
 
 def WaitAndExit():
     input("Press Enter to close the program.")
+    if window:
+        win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
 
 def TrimString(string, maxChars):
     if len(string) > maxChars:
@@ -300,6 +250,9 @@ def TrimString(string, maxChars):
     else:
         return string
     
+def log(text):
+    print("[WinYandexMusicRPC] -> {}".format(text))
+
 def GetLastVersion(repoUrl):
     try:
         global current_version
@@ -314,6 +267,84 @@ def GetLastVersion(repoUrl):
     except requests.exceptions.RequestException as e:
         log("Error getting latest version:", e)
 
+# Действия для кнопок
+def tray_click(icon, query):
+    match str(query):
+        case "GitHub":
+            webbrowser.open(repo_url,  new=2)
+
+        case "Show Console":
+            win32gui.ShowWindow(window, win32con.SW_SHOW)
+
+        case "Hide Console":
+            win32gui.ShowWindow(window, win32con.SW_HIDE)
+
+        case "Exit":
+            icon.stop()
+            win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
+
+def tray_thread():
+    tray_icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
+        pystray.MenuItem("GitHub", tray_click),
+        pystray.MenuItem("Show Console", tray_click,default=True),
+        pystray.MenuItem("Hide Console", tray_click),
+        pystray.MenuItem("Exit", tray_click)))
+    tray_icon.run()
+
+def Is_already_running():
+    hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC")
+    if hwnd:
+        return True
+    return False
+
+def Check_conhost():
+    # Запущен ли скрипт уже через conhost
+    if '--run-through-conhost' not in sys.argv:
+        script_path = os.path.abspath(sys.argv[0])
+        subprocess.Popen(['cmd', '/c', 'start', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:])
+        sys.exit()
+
+def Disable_close_button():
+    hwnd = win32console.GetConsoleWindow()
+    if hwnd:
+        hMenu = win32gui.GetSystemMenu(hwnd, False)
+        if hMenu:
+            win32gui.DeleteMenu(hMenu, win32con.SC_CLOSE, win32con.MF_BYCOMMAND)
+
+def Is_run_by_exe():
+    script_path = os.path.abspath(sys.argv[0])
+    if script_path.endswith('.exe'):
+        return True
+    else:
+        return False
+
 if __name__ == '__main__':
+    if Is_run_by_exe():
+        Check_conhost()
+        # Иконка для трея
+        if getattr(sys, 'frozen', False): #Запуск с помощью pyinstaller
+            resources_path = sys._MEIPASS
+        else:
+            resources_path = os.path.dirname(os.path.abspath(__file__))
+        tray_image = Image.open(f"{resources_path}/assets/tray.png")
+
+        tray_thread = threading.Thread(target=tray_thread)
+        tray_thread.start()
+
+        window = win32console.GetConsoleWindow()
+        if Is_already_running():
+            print("WinYandexMusicRPC is already running.")
+            WaitAndExit()
+        win32console.SetConsoleTitle("WinYandexMusicRPC")
+        Disable_close_button() # Отключаем кнопку закрытия консоли
+        if window:
+            log("Minimize to system tray in 2 seconds...")
+            time.sleep(2)
+            win32gui.ShowWindow(window, win32con.SW_HIDE)
+        else:
+            log("Window not found")
+    else:
+        log("Launch without exe and minimize to tray")
+
     presence = Presence()
     presence.start()
