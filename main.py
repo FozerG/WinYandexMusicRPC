@@ -1,6 +1,5 @@
 import asyncio
 from datetime import timedelta
-import psutil
 import pypresence
 import time
 from enum import Enum
@@ -11,7 +10,6 @@ import psutil
 import requests
 import os
 import sys
-import signal
 import webbrowser
 import pystray
 from PIL import Image
@@ -20,19 +18,19 @@ import win32gui, win32con, win32console
 import subprocess
 
 # Идентификатор клиента Discord для Rich Presence
-client_id = '978995592736944188'
+CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-current_version = "v1.8.5"
+CURRENT_VERSION = "v1.8.5"
+
+# Ссылка на репозиторий
+REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
 
 # Переменная для хранения предыдущего трека и избежания дублирования обновлений.
 name_prev = str()
-
-# Ссылка на репо
-repo_url = "https://github.com/FozerG/WinYandexMusicRPC"
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -86,8 +84,8 @@ class Presence:
                 return
 
             log("Launched. Check the actual version...")
-            GetLastVersion(repo_url)
-            self.rpc = pypresence.Presence(client_id)
+            GetLastVersion(REPO_URL)
+            self.rpc = pypresence.Presence(CLIENT_ID)
             self.rpc.connect()
             self.client = Client().init()
             self.running = True
@@ -255,23 +253,30 @@ def log(text):
 
 def GetLastVersion(repoUrl):
     try:
-        global current_version
+        global CURRENT_VERSION
         response = requests.get(repoUrl + '/releases/latest')
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
-        if current_version != latest_version:
-            log(f"A new version has been released on GitHub. You are using - {current_version}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
+        if CURRENT_VERSION != latest_version:
+            log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}")
         else:
             log(f"You are using the latest version of the script")
         
     except requests.exceptions.RequestException as e:
         log("Error getting latest version:", e)
 
+
+# Функция для переключения состояния strong_find
+def toggle_action(icon, item):
+    global strong_find
+    strong_find = not strong_find
+    log(f'Bool strong_find set state: {strong_find}')
+
 # Действия для кнопок
 def tray_click(icon, query):
     match str(query):
         case "GitHub":
-            webbrowser.open(repo_url,  new=2)
+            webbrowser.open(REPO_URL,  new=2)
 
         case "Show Console":
             win32gui.ShowWindow(window, win32con.SW_SHOW)
@@ -288,6 +293,7 @@ def tray_thread():
         pystray.MenuItem("GitHub", tray_click),
         pystray.MenuItem("Show Console", tray_click,default=True),
         pystray.MenuItem("Hide Console", tray_click),
+        pystray.MenuItem('Toggle strong_find', toggle_action, checked=lambda item: strong_find),
         pystray.MenuItem("Exit", tray_click)))
     tray_icon.run()
 
@@ -298,8 +304,7 @@ def Is_already_running():
     return False
 
 def Check_conhost():
-    # Запущен ли скрипт уже через conhost
-    if '--run-through-conhost' not in sys.argv:
+    if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
         script_path = os.path.abspath(sys.argv[0])
         subprocess.Popen(['cmd', '/c', 'start', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:])
         sys.exit()
@@ -321,30 +326,42 @@ def Is_run_by_exe():
 if __name__ == '__main__':
     if Is_run_by_exe():
         Check_conhost()
-        # Иконка для трея
-        if getattr(sys, 'frozen', False): #Запуск с помощью pyinstaller
+        
+        # Установка пути к ресурсам
+        if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
             resources_path = sys._MEIPASS
         else:
             resources_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Загрузка иконки для трея
         tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
+        # Запуск потока для трея
         tray_thread = threading.Thread(target=tray_thread)
         tray_thread.start()
 
+        # Получение окна консоли
         window = win32console.GetConsoleWindow()
+        
         if Is_already_running():
             print("WinYandexMusicRPC is already running.")
             WaitAndExit()
+        
+        # Установка заголовка окна консоли
         win32console.SetConsoleTitle("WinYandexMusicRPC")
-        Disable_close_button() # Отключаем кнопку закрытия консоли
+        
+        # Отключение кнопки закрытия консоли
+        Disable_close_button()
+        
         if window:
             log("Minimize to system tray in 2 seconds...")
             time.sleep(2)
-            win32gui.ShowWindow(window, win32con.SW_HIDE)
+            win32gui.ShowWindow(window, win32con.SW_HIDE)  # Скрытие окна консоли
         else:
             log("Window not found")
-    else:
+    else: # Запуск без exe (например в visual studio code)
         log("Launch without exe and minimize to tray")
 
+    # Запуск Presence
     presence = Presence()
     presence.start()
