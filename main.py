@@ -80,12 +80,10 @@ class Presence:
         def start(self) -> None:
             exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
             if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
-                log("Discord is not launched")
+                log("Discord is not launched", LogType.Error)
                 WaitAndExit()
                 return
 
-            log("Launched. Check the actual version...")
-            GetLastVersion(REPO_URL)
             self.rpc = pypresence.Presence(CLIENT_ID)
             self.rpc.connect()
             self.client = Client().init()
@@ -96,7 +94,7 @@ class Presence:
                 currentTime = time.time()
 
                 if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
-                    log("Discord was closed")
+                    log("Discord was closed", LogType.Error)
                     WaitAndExit()
                     return
 
@@ -105,9 +103,9 @@ class Presence:
                     if ongoing_track['success']: 
                         if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
                             if ongoing_track['label'] != self.currentTrack['label']: 
-                                log(f"Changed track to {ongoing_track['label']}",3)
+                                log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
                         else:
-                            log(f"Changed track to {ongoing_track['label']}",3)
+                            log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
                         self.paused_time = 0
                         trackTime = currentTime
                         remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
@@ -130,7 +128,7 @@ class Presence:
                 else: #Песня не новая, проверяем статус паузы
                     if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not self.paused:
                         self.paused = True
-                        log(f"Track {ongoing_track['label']} on pause")
+                        log(f"Track {ongoing_track['label']} on pause", LogType.Update_Status)
 
                         if ongoing_track['success']:
                             self.rpc.update(
@@ -145,7 +143,7 @@ class Presence:
                             )
 
                     elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
-                        log(f"Track {ongoing_track['label']} off pause.")
+                        log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
                         self.paused = False
 
                     elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and self.paused and trackTime != 0:
@@ -153,7 +151,7 @@ class Presence:
                         if self.paused_time > 5 * 60:  # если пауза больше 5 минут
                             trackTime = 0
                             self.rpc.clear()
-                            log(f"Clear RPC due to paused for more than 5 minutes")
+                            log(f"Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
                     else:
                         self.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
 
@@ -167,7 +165,7 @@ class Presence:
                 global name_prev
                 global strong_find
                 if str(name_current) == " - ":
-                    log("Winsdk returned empty string")
+                    log("Winsdk returned empty string", LogType.Error)
                     {'success': False}
                 if str(name_current) != name_prev:
                     log("Now listening to " + name_current)
@@ -233,14 +231,15 @@ class Presence:
                     }
 
             except Exception as exception:
-                log(f"Something happened: {exception}", 2)        
-                win32gui.ShowWindow(window, win32con.SW_SHOW)
+                log(f"Something happened: {exception}", LogType.Error)        
                 WaitAndExit()
                 return {'success': False}
 
 def WaitAndExit():
+    if Is_run_by_exe():
+        win32gui.ShowWindow(window, win32con.SW_SHOW)
     input("Press Enter to close the program.")
-    if window:
+    if Is_run_by_exe():
         win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
 
 def TrimString(string, maxChars):
@@ -249,38 +248,45 @@ def TrimString(string, maxChars):
     else:
         return string
     
-def log(text, code=0):
-    init()
+class LogType(Enum):
+    Default = 0
+    Notification = 1
+    Error = 2
+    Update_Status = 3
+
+def log(text, type = LogType.Default):
+    init() #Инициализация colorama
     # Цвета текста
     red_text = Fore.RED
     yellow_text = Fore.YELLOW
     blue_text = Fore.CYAN
     reset_text = Style.RESET_ALL
 
-    if code == 1:
+    if type == LogType.Notification:
         message_color = yellow_text
-    elif code == 2:
+    elif type == LogType.Error:
         message_color = red_text
-    elif code == 3:
+    elif type == LogType.Update_Status:
         message_color = blue_text
     else:
         message_color = reset_text
 
     print(f"{red_text}[WinYandexMusicRPC] -> {message_color}{text}{reset_text}")
+    
 
 def GetLastVersion(repoUrl):
     try:
         global CURRENT_VERSION
-        response = requests.get(repoUrl + '/releases/latest')
+        response = requests.get(repoUrl + '/releases/latest', timeout=5)
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
         if CURRENT_VERSION != latest_version:
-            log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}", 1)
+            log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}", LogType.Notification)
         else:
             log(f"You are using the latest version of the script")
         
     except requests.exceptions.RequestException as e:
-        log("Error getting latest version: {e}", 2)
+        log(f"Error getting latest version: {e}", LogType.Error)
 
 
 # Функция для переключения состояния strong_find
@@ -333,6 +339,15 @@ def Disable_close_button():
         if hMenu:
             win32gui.DeleteMenu(hMenu, win32con.SC_CLOSE, win32con.MF_BYCOMMAND)
 
+def Set_ConsoleMode():
+    hStdin = win32console.GetStdHandle(win32console.STD_INPUT_HANDLE)
+    mode = hStdin.GetConsoleMode()
+
+    # Отключить ENABLE_QUICK_EDIT_MODE, чтобы запретить выделение текста
+    new_mode = mode & ~0x0040
+    # Установить новый режим ввода
+    hStdin.SetConsoleMode(new_mode)
+
 def Is_run_by_exe():
     script_path = os.path.abspath(sys.argv[0])
     if script_path.endswith('.exe'):
@@ -343,7 +358,9 @@ def Is_run_by_exe():
 if __name__ == '__main__':
     if Is_run_by_exe():
         Check_conhost()
-        
+        Set_ConsoleMode()
+        log("Launched. Check the actual version...")
+        GetLastVersion(REPO_URL)
         # Установка пути к ресурсам
         if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
             resources_path = sys._MEIPASS
@@ -361,7 +378,7 @@ if __name__ == '__main__':
         window = win32console.GetConsoleWindow()
         
         if Is_already_running():
-            print("WinYandexMusicRPC is already running.")
+            log("WinYandexMusicRPC is already running.", LogType.Error)
             WaitAndExit()
         
         # Установка заголовка окна консоли
@@ -371,13 +388,13 @@ if __name__ == '__main__':
         Disable_close_button()
         
         if window:
-            log("Minimize to system tray in 2 seconds...")
-            time.sleep(2)
+            log("Minimize to system tray in 3 seconds...")
+            time.sleep(3)
             win32gui.ShowWindow(window, win32con.SW_HIDE)  # Скрытие окна консоли
         else:
-            log("Window not found")
+            log("Console window not found", LogType.Error)
     else: # Запуск без exe (например в visual studio code)
-        log("Launch without exe and minimize to tray")
+        log("Launched without minimizing to tray and other and other gui functions")
 
     # Запуск Presence
     presence = Presence()
