@@ -1,8 +1,10 @@
 asyncio
-psutil
 pypresence
-yandex_music
-winsdk
-pillow
+psutil
+requests
 pystray
+Pillow
+winsdk
+yandex-music
+colorama
 pywin32
