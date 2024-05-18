@@ -65,8 +65,16 @@ async def get_media_info():
         return info_dict
     raise Exception('The music is not playing right now.')
 
+
+
 # Класс для работы с Rich Presence в Discord.
 class Presence:
+        def is_discord_running(self) -> bool:
+            return any(name in (p.name() for p in psutil.process_iter()) for name in self.exe_names)
+        
+        def is_discord_ready(self) -> bool:
+            return os.path.exists(self.ipc_pipe)
+
         def __init__(self) -> None:
             self.client = None
             self.currentTrack = None
@@ -74,15 +82,22 @@ class Presence:
             self.running = False
             self.paused = False
             self.paused_time = 0 
+            self.exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
+            self.ipc_pipe = r'\\.\pipe\discord-ipc-0'
 
 
         # Метод для запуска Rich Presence.
         def start(self) -> None:
-            exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
-            if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
-                log("Discord is not launched", LogType.Error)
-                WaitAndExit()
-                return
+            while True:
+                if self.is_discord_running():
+                    if self.is_discord_ready():
+                        log("Discord is ready for Rich Presence")
+                        break
+                    else:
+                        log("Discord is launched but not ready for Rich Presence", LogType.Error)
+                else:
+                    log("Discord is not launched", LogType.Error)
+                time.sleep(3)
 
             self.rpc = pypresence.Presence(CLIENT_ID)
             self.rpc.connect()
@@ -93,7 +108,7 @@ class Presence:
             while self.running:
                 currentTime = time.time()
 
-                if not any(name in (p.name() for p in psutil.process_iter()) for name in exe_names):
+                if not any(name in (p.name() for p in psutil.process_iter()) for name in self.exe_names):
                     log("Discord was closed", LogType.Error)
                     WaitAndExit()
                     return
@@ -232,7 +247,6 @@ class Presence:
 
             except Exception as exception:
                 log(f"Something happened: {exception}", LogType.Error)        
-                WaitAndExit()
                 return {'success': False}
 
 def WaitAndExit():
