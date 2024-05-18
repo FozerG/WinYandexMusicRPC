@@ -342,8 +342,10 @@ def Is_already_running():
 
 def Check_conhost():
     if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
+        print("Wait a few seconds for the script to load.")
         script_path = os.path.abspath(sys.argv[0])
-        subprocess.Popen(['cmd', '/c', 'start', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:])
+        subprocess.Popen(['cmd', '/c', 'start','/min', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:])
+        time.sleep(2)
         sys.exit()
 
 def Disable_close_button():
@@ -400,7 +402,7 @@ if __name__ == '__main__':
         
         # Отключение кнопки закрытия консоли
         Disable_close_button()
-        
+        win32gui.ShowWindow(window, win32con.SW_SHOW)  # Показываем окно т.к оно свернуто с помощью "/min"
         if window:
             log("Minimize to system tray in 3 seconds...")
             time.sleep(3)
