@@ -22,7 +22,7 @@ from colorama import init, Fore, Style
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v1.8.5"
+CURRENT_VERSION = "v1.9"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
