@@ -8,3 +8,4 @@ winsdk
 yandex-music
 colorama
 pywin32
+packaging

@@ -17,12 +17,12 @@ import threading
 import win32gui, win32con, win32console
 import subprocess
 from colorama import init, Fore, Style
-
+from packaging import version
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v1.9"
+CURRENT_VERSION = "v1.9.1"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -299,10 +299,13 @@ def GetLastVersion(repoUrl):
         response = requests.get(repoUrl + '/releases/latest', timeout=5)
         response.raise_for_status()
         latest_version = response.url.split('/')[-1]
-        if CURRENT_VERSION != latest_version:
+
+        if version.parse(CURRENT_VERSION) < version.parse(latest_version):
             log(f"A new version has been released on GitHub. You are using - {CURRENT_VERSION}. A new version - {latest_version}, you can download it at {repoUrl + '/releases/tag/' + latest_version}", LogType.Notification)
-        else:
+        elif version.parse(CURRENT_VERSION) == version.parse(latest_version):
             log(f"You are using the latest version of the script")
+        else:
+            log(f"You are using the beta version of the script", LogType.Notification)
         
     except requests.exceptions.RequestException as e:
         log(f"Error getting latest version: {e}", LogType.Error)
@@ -345,13 +348,18 @@ def Is_already_running():
         return True
     return False
 
+def Is_windows_11():
+    return sys.getwindowsversion().build >= 22000
+
+
 def Check_conhost():
-    if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
-        print("Wait a few seconds for the script to load.")
-        script_path = os.path.abspath(sys.argv[0])
-        subprocess.Popen(['cmd', '/c', 'start','/min', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:])
-        time.sleep(2)
-        sys.exit()
+    if Is_windows_11(): #Windows 11 имеет неудобную консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
+        if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
+            print("Wait a few seconds for the script to load.")
+            script_path = os.path.abspath(sys.argv[0])
+            subprocess.Popen(['start', '/min', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:], shell=True)
+            time.sleep(2)
+            sys.exit()
 
 def Disable_close_button():
     hwnd = win32console.GetConsoleWindow()
