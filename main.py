@@ -233,9 +233,9 @@ class Presence:
                 if track:
                     return {
                         'success': True,
-                        'title': TrimString(track.title, 40),
-                        'artist': TrimString(f"{', '.join(track.artists_name())}",40),
-                        'album': TrimString(track.albums[0].title,25),
+                        'title': Single_char(TrimString(track.title, 40)),
+                        'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
+                        'album':    Single_char(TrimString(track.albums[0].title,25)),
                         'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
                         'duration': "Duration: None",
                         'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
@@ -261,6 +261,11 @@ def TrimString(string, maxChars):
         return string[:maxChars] + "..."
     else:
         return string
+    
+def Single_char(s):
+    if len(s) == 1:
+        return f'"{s}"'
+    return s
     
 class LogType(Enum):
     Default = 0
