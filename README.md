@@ -1,4 +1,4 @@
-# **<img src="./assets/tray.png" alt="icon" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
+# **<img src="./assets/tray.png" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
 Discord RPC для показа музыки которую вы сейчас слушаете на компьютере. Загрузка треков и их обложка происходит из Яндекс Музыки.  
 ![discord](./img/screen1.png)
 
