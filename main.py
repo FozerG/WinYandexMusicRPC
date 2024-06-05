@@ -343,7 +343,7 @@ def tray_thread():
     tray_icon.run()
 
 def Is_already_running():
-    hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC")
+    hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC - Console")
     if hwnd:
         return True
     return False
@@ -411,7 +411,7 @@ if __name__ == '__main__':
             WaitAndExit()
         
         # Установка заголовка окна консоли
-        win32console.SetConsoleTitle("WinYandexMusicRPC")
+        win32console.SetConsoleTitle("WinYandexMusicRPC - Console")
         
         # Отключение кнопки закрытия консоли
         Disable_close_button()
