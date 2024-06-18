@@ -43,28 +43,34 @@ class PlaybackStatus(Enum):
     Playing = 4
     Stopped = 5
 
-# Асинхронная функция для получения информации о стартовой позиции начала трека
-async def get_timeline_position():
-    sessions = await MediaManager.request_async()
-    current_session = sessions.get_current_session()
-    if current_session:
-        position = current_session.get_timeline_properties().position
-        return position
-    else:
-        return timedelta(seconds=0)
-        
-# Асинхронная функция для получения информации о мультимедийном контенте через Windows SDK.
-async def get_media_info():
-    sessions = await MediaManager.request_async()
-    current_session = sessions.get_current_session()
-    if current_session:
-        info = await current_session.try_get_media_properties_async()
-        info_dict = {song_attr: info.__getattribute__(song_attr) for song_attr in dir(info) if song_attr[0] != '_'}
-        info_dict['genres'] = list(info_dict['genres'])
-        playback_status = PlaybackStatus(current_session.get_playback_info().playback_status)
-        info_dict['playback_status'] = playback_status.name
-        return info_dict
-    raise Exception('The music is not playing right now.')
+# Функция для получения стартовой позиции начала трека
+def get_timeline_position():
+    async def async_get_timeline_position():
+        sessions = await MediaManager.request_async()
+        current_session = sessions.get_current_session()
+        if current_session:
+            position = current_session.get_timeline_properties().position
+            return position
+        else:
+            return timedelta(seconds=0)
+    
+    return asyncio.run(async_get_timeline_position())
+
+# Функция для получения информации о мультимедийном контенте через Windows SDK
+def get_media_info():
+    async def async_get_media_info():
+        sessions = await MediaManager.request_async()
+        current_session = sessions.get_current_session()
+        if current_session:
+            info = await current_session.try_get_media_properties_async()
+            info_dict = {song_attr: getattr(info, song_attr) for song_attr in dir(info) if not song_attr.startswith('_')}
+            info_dict['genres'] = list(info_dict['genres'])
+            playback_status = PlaybackStatus(current_session.get_playback_info().playback_status)
+            info_dict['playback_status'] = playback_status.name
+            return info_dict
+        raise Exception('The music is not playing right now.')
+    
+    return asyncio.run(async_get_media_info())
 
 class Presence:
     client = None
@@ -199,21 +205,12 @@ class Presence:
                 Presence.discord_was_closed()        
             except Exception as e:
                 log(f"Presence class stopped for a reason: {e}", LogType.Error)
-            
 
-    @staticmethod
-    def run_async(coro):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(coro)
-        loop.close()
-        return result
-    
     # Метод для получения информации о текущем треке.
     @staticmethod
     def getTrack() -> dict:
         try:
-            current_media_info = Presence.run_async(get_media_info())
+            current_media_info = get_media_info()
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
@@ -231,7 +228,7 @@ class Presence:
                 log("Now listening to " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
                 currentTrack_copy = Presence.currentTrack.copy()
-                position = Presence.run_async(get_timeline_position())
+                position = get_timeline_position()
                 currentTrack_copy["start-time"] = position
                 currentTrack_copy["playback"] = current_media_info['playback_status']
                 return currentTrack_copy
@@ -274,7 +271,7 @@ class Presence:
 
             track = finalTrack
             trackId = track.trackId.split(":")
-            startTime = Presence.run_async(get_timeline_position())
+            startTime = get_timeline_position()
             if track:
                 return {
                     'success': True,
@@ -378,6 +375,7 @@ def tray_click(icon, query):
             win32gui.ShowWindow(window, win32con.SW_HIDE)
 
         case "Exit":
+            Presence.stop()
             icon.stop()
             win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
 
