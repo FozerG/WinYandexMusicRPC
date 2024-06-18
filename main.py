@@ -18,11 +18,12 @@ import win32gui, win32con, win32console
 import subprocess
 from colorama import init, Fore, Style
 from packaging import version
+
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v1.9.1"
+CURRENT_VERSION = "v1.9.2"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -65,66 +66,89 @@ async def get_media_info():
         return info_dict
     raise Exception('The music is not playing right now.')
 
-
-
-# Класс для работы с Rich Presence в Discord.
 class Presence:
-        def is_discord_running(self) -> bool:
-            return any(name in (p.name() for p in psutil.process_iter()) for name in self.exe_names)
+    client = None
+    currentTrack = None
+    rpc = None
+    running = False
+    paused = False
+    paused_time = 0 
+    exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
+
+    @staticmethod
+    def is_discord_running() -> bool:
+        return any(name in (p.name() for p in psutil.process_iter()) for name in Presence.exe_names)
         
-        def is_discord_ready(self) -> bool:
-            return os.path.exists(self.ipc_pipe)
-
-        def __init__(self) -> None:
-            self.client = None
-            self.currentTrack = None
-            self.rpc = None
-            self.running = False
-            self.paused = False
-            self.paused_time = 0 
-            self.exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
-            self.ipc_pipe = r'\\.\pipe\discord-ipc-0'
-
-
-        # Метод для запуска Rich Presence.
-        def start(self) -> None:
-            while True:
-                if self.is_discord_running():
-                    if self.is_discord_ready():
-                        log("Discord is ready for Rich Presence")
-                        break
-                    else:
-                        log("Discord is launched but not ready for Rich Presence", LogType.Error)
+    @staticmethod
+    def connect_rpc():
+        try:
+            rpc = pypresence.Presence(CLIENT_ID)
+            rpc.connect()
+            return rpc
+        except pypresence.exceptions.DiscordNotFound:
+            log("Pypresence - Discord not found.", LogType.Error)
+            return None
+        except pypresence.exceptions.InvalidID:
+            log("Pypresence - Incorrect CLIENT_ID", LogType.Error)
+            return None
+        except Exception as e:
+            log(f"Discord is not ready for a reason: {e}", LogType.Error)
+            return None
+        
+    @staticmethod
+    def CheckDiscorAvailable() -> bool:
+        while True:
+            if Presence.is_discord_running():
+                Presence.rpc = Presence.connect_rpc() 
+                if Presence.rpc:
+                    log("Discord is ready for Rich Presence")
+                    break
                 else:
-                    log("Discord is not launched", LogType.Error)
-                time.sleep(3)
+                    log("Discord is launched but not ready for Rich Presence. Try again...", LogType.Error)
+            else:
+                log("Discord is not launched", LogType.Error)
+            time.sleep(3)
 
-            self.rpc = pypresence.Presence(CLIENT_ID)
-            self.rpc.connect()
-            self.client = Client().init()
-            self.running = True
-            self.currentTrack = None
+    @staticmethod
+    def stop() -> None:
+        if Presence.rpc:
+            Presence.rpc.close()
+            Presence.rpc = None
+            Presence.running = False
 
-            while self.running:
-                currentTime = time.time()
-
-                if not any(name in (p.name() for p in psutil.process_iter()) for name in self.exe_names):
-                    log("Discord was closed", LogType.Error)
-                    WaitAndExit()
-                    return
-
-                ongoing_track = self.getTrack()
-                if self.currentTrack != ongoing_track : # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
+    @staticmethod
+    def discord_was_closed() -> None:
+        log("Discord was closed. Waiting for restart...", LogType.Error)
+        Presence.currentTrack = None
+        global name_prev
+        name_prev = None
+        Presence.CheckDiscorAvailable()
+            
+            
+    # Метод для запуска Rich Presence.
+    @staticmethod
+    def start() -> None:
+        Presence.CheckDiscorAvailable()
+        Presence.client = Client().init()
+        Presence.running = True
+        Presence.currentTrack = None
+        while Presence.running:
+            currentTime = time.time()
+            if not Presence.is_discord_running():
+                Presence.discord_was_closed() 
+            try:
+                ongoing_track = Presence.getTrack()
+                if Presence.currentTrack != ongoing_track: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
                     if ongoing_track['success']: 
-                        if self.currentTrack is not None and 'label' in self.currentTrack and self.currentTrack['label'] is not None:
-                            if ongoing_track['label'] != self.currentTrack['label']: 
+                        if Presence.currentTrack is not None and 'label' in Presence.currentTrack and Presence.currentTrack['label'] is not None:
+                            if ongoing_track['label'] != Presence.currentTrack['label']: 
                                 log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
                         else:
                             log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
-                        self.paused_time = 0
+                        Presence.paused_time = 0
                         trackTime = currentTime
                         remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
-                        self.rpc.update(
+                        Presence.rpc.update(
                             details=ongoing_track['title'],
                             state=ongoing_track['artist'],
                             end=currentTime + remainingTime,
@@ -132,129 +156,153 @@ class Presence:
                             large_text=ongoing_track['album'],
 
                             buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}] #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
-                                                                                                #Если превысить лимит то Discord RPC не будет виден другим пользователям.
+                                                                                            #Если превысить лимит то Discord RPC не будет виден другим пользователям.
                         )
                     else:
-                        self.rpc.clear()
+                        Presence.rpc.clear()
                         log(f"Clear RPC")
 
-                    self.currentTrack = ongoing_track
+                    Presence.currentTrack = ongoing_track
 
                 else: #Песня не новая, проверяем статус паузы
-                    if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not self.paused:
-                        self.paused = True
+                    if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not Presence.paused:
+                        Presence.paused = True
                         log(f"Track {ongoing_track['label']} on pause", LogType.Update_Status)
 
                         if ongoing_track['success']:
-                            self.rpc.update(
+                            Presence.rpc.update(
                                 details=ongoing_track['title'],
                                 state=ongoing_track['artist'],
                                 large_image=ongoing_track['og-image'],
                                 large_text=ongoing_track['album'],
                                 buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}], #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
-                                                                                                        #Если превысить лимит то Discord RPC не будет виден другим пользователям.
+                                                                                            #Если превысить лимит то Discord RPC не будет виден другим пользователям.
                                 small_image="https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
                                 small_text="На паузе"
                             )
 
-                    elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and self.paused:
+                    elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
                         log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
-                        self.paused = False
+                        Presence.paused = False
 
-                    elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and self.paused and trackTime != 0:
-                        self.paused_time = currentTime - trackTime
-                        if self.paused_time > 5 * 60:  # если пауза больше 5 минут
+                    elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused and trackTime != 0:
+                        Presence.paused_time = currentTime - trackTime
+                        if Presence.paused_time > 5 * 60:  # если пауза больше 5 минут
                             trackTime = 0
-                            self.rpc.clear()
+                            Presence.rpc.clear()
                             log(f"Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
                     else:
-                        self.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
+                        Presence.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
 
                 time.sleep(3)
+            except pypresence.exceptions.PipeClosed:
+                Presence.discord_was_closed()        
+            except Exception as e:
+                log(f"Presence class stopped for a reason: {e}", LogType.Error)
+            
 
-        # Метод для получения информации о текущем треке.
-        def getTrack(self) -> dict:
-            try:
-                current_media_info = asyncio.run(get_media_info())
-                name_current = current_media_info["artist"] + " - " + current_media_info["title"]
-                global name_prev
-                global strong_find
-                if str(name_current) == " - ":
-                    log("Winsdk returned empty string", LogType.Error)
-                    {'success': False}
-                if str(name_current) != name_prev:
-                    log("Now listening to " + name_current)
-                else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
-                    currentTrack_copy = self.currentTrack.copy()
-                    position = asyncio.run(get_timeline_position())
-                    currentTrack_copy["start-time"] = position
-                    currentTrack_copy["playback"] = current_media_info['playback_status']
-                    return currentTrack_copy
-
-                name_prev = str(name_current)
-                search = self.client.search(name_current, True, "all", 0, False)
-
-                if search.tracks == None:
-                    log(f"Can't find the song: {name_current}")
-                    return {'success': False}
-
-                finalTrack = None
-                debugStr = []
-                for index, trackFromSearch in enumerate(search.tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
-                    if trackFromSearch.type not in ['music', 'track', 'podcast_episode']:
-                        debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong type.")
-
-                    # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
-                    artists = trackFromSearch.artists_name()
-                    all_variants = list(permutations(artists))
-                    all_variants = [list(variant) for variant in all_variants]
-                    findTrackNames = []
-                    for variant in all_variants:
-                        findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
-                    # Также может отличаться регистр, так что приведём всё в один регистр.    
-                    boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
-
-                    if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
-                        findTrackName = ', '.join([str(elem) for elem in trackFromSearch.artists_name()]) + " - " + trackFromSearch.title
-                        debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong title. Now play: {name_current}. But we find: {findTrackName}")
-                        continue
-                    else: #иначе трек найден
-                        finalTrack = trackFromSearch
-                        break
-
-                if finalTrack == None:
-                    print('\n'.join(debugStr))
-                    log(f"Can't find the song (strong_find): {name_current}")
-                    return {'success': False}
-
-                track = finalTrack
-                trackId = track.trackId.split(":")
-                startTime = asyncio.run(get_timeline_position())
-                if track:
-                    return {
-                        'success': True,
-                        'title': Single_char(TrimString(track.title, 40)),
-                        'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
-                        'album':    Single_char(TrimString(track.albums[0].title,25)),
-                        'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
-                        'duration': "Duration: None",
-                        'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
-                        'durationSec': track.duration_ms // 1000,
-                        'start-time': startTime,
-                        'playback': current_media_info['playback_status'],
-                        'og-image': "https://" + track.og_image[:-2] + "400x400"
-                    }
-
-            except Exception as exception:
-                log(f"Something happened: {exception}", LogType.Error)        
+    @staticmethod
+    def run_async(coro):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(coro)
+        loop.close()
+        return result
+    
+    # Метод для получения информации о текущем треке.
+    @staticmethod
+    def getTrack() -> dict:
+        try:
+            current_media_info = Presence.run_async(get_media_info())
+            if not current_media_info:
+                log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
+            
+            artist = current_media_info.get("artist", "").strip()
+            title = current_media_info.get("title", "").strip()
+
+            if not artist or not title:
+                log("Winsdk returned empty string for artist or title", LogType.Error)
+                return {'success': False}
+            name_current = artist + " - " + title
+            global name_prev
+            global strong_find
+            if str(name_current) != name_prev:
+                log("Now listening to " + name_current)
+            else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
+                currentTrack_copy = Presence.currentTrack.copy()
+                position = Presence.run_async(get_timeline_position())
+                currentTrack_copy["start-time"] = position
+                currentTrack_copy["playback"] = current_media_info['playback_status']
+                return currentTrack_copy
+
+            name_prev = str(name_current)
+            search = Presence.client.search(name_current, True, "all", 0, False)
+
+            if search.tracks is None:
+                log(f"Can't find the song: {name_current}")
+                return {'success': False}
+
+            finalTrack = None
+            debugStr = []
+            for index, trackFromSearch in enumerate(search.tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
+                if trackFromSearch.type not in ['music', 'track', 'podcast_episode']:
+                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong type.")
+
+                # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
+                artists = trackFromSearch.artists_name()
+                all_variants = list(permutations(artists))
+                all_variants = [list(variant) for variant in all_variants]
+                findTrackNames = []
+                for variant in all_variants:
+                    findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
+                # Также может отличаться регистр, так что приведём всё в один регистр.    
+                boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
+
+                if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
+                    findTrackName = ', '.join([str(elem) for elem in trackFromSearch.artists_name()]) + " - " + trackFromSearch.title
+                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong title. Now play: {name_current}. But we find: {findTrackName}")
+                    continue
+                else: #иначе трек найден
+                    finalTrack = trackFromSearch
+                    break
+
+            if finalTrack is None:
+                print('\n'.join(debugStr))
+                log(f"Can't find the song (strong_find): {name_current}")
+                return {'success': False}
+
+            track = finalTrack
+            trackId = track.trackId.split(":")
+            startTime = Presence.run_async(get_timeline_position())
+            if track:
+                return {
+                    'success': True,
+                    'title': Single_char(TrimString(track.title, 40)),
+                    'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
+                    'album':    Single_char(TrimString(track.albums[0].title,25)),
+                    'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
+                    'duration': "Duration: None",
+                    'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
+                    'durationSec': track.duration_ms // 1000,
+                    'start-time': startTime,
+                    'playback': current_media_info['playback_status'],
+                    'og-image': "https://" + track.og_image[:-2] + "400x400"
+                }
+
+        except Exception as exception:
+            log(f"Something happened: {exception}", LogType.Error)        
+            return {'success': False}
 
 def WaitAndExit():
     if Is_run_by_exe():
         win32gui.ShowWindow(window, win32con.SW_SHOW)
+    Presence.stop()
     input("Press Enter to close the program.")
     if Is_run_by_exe():
         win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
+    else:
+        sys.exit(0)
 
 def TrimString(string, maxChars):
     if len(string) > maxChars:
@@ -353,7 +401,7 @@ def Is_windows_11():
 
 
 def Check_conhost():
-    if Is_windows_11(): #Windows 11 имеет неудобную консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
+    if Is_windows_11(): #Windows 11 имеет консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
         if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
             print("Wait a few seconds for the script to load.")
             script_path = os.path.abspath(sys.argv[0])
@@ -385,46 +433,49 @@ def Is_run_by_exe():
         return False
 
 if __name__ == '__main__':
-    if Is_run_by_exe():
-        Check_conhost()
-        Set_ConsoleMode()
-        log("Launched. Check the actual version...")
-        GetLastVersion(REPO_URL)
-        # Установка пути к ресурсам
-        if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
-            resources_path = sys._MEIPASS
-        else:
-            resources_path = os.path.dirname(os.path.abspath(__file__))
-        
-        # Загрузка иконки для трея
-        tray_image = Image.open(f"{resources_path}/assets/tray.png")
+    try:
+        if Is_run_by_exe():
+            Check_conhost()
+            Set_ConsoleMode()
+            log("Launched. Check the actual version...")
+            GetLastVersion(REPO_URL)
+            # Установка пути к ресурсам
+            if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
+                resources_path = sys._MEIPASS
+            else:
+                resources_path = os.path.dirname(os.path.abspath(__file__))
+            
+            # Загрузка иконки для трея
+            tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
-        # Запуск потока для трея
-        tray_thread = threading.Thread(target=tray_thread)
-        tray_thread.start()
+            # Запуск потока для трея
+            tray_thread = threading.Thread(target=tray_thread)
+            tray_thread.start()
 
-        # Получение окна консоли
-        window = win32console.GetConsoleWindow()
-        
-        if Is_already_running():
-            log("WinYandexMusicRPC is already running.", LogType.Error)
-            WaitAndExit()
-        
-        # Установка заголовка окна консоли
-        win32console.SetConsoleTitle("WinYandexMusicRPC - Console")
-        
-        # Отключение кнопки закрытия консоли
-        Disable_close_button()
-        win32gui.ShowWindow(window, win32con.SW_SHOW)  # Показываем окно т.к оно свернуто с помощью "/min"
-        if window:
-            log("Minimize to system tray in 3 seconds...")
-            time.sleep(3)
-            win32gui.ShowWindow(window, win32con.SW_HIDE)  # Скрытие окна консоли
-        else:
-            log("Console window not found", LogType.Error)
-    else: # Запуск без exe (например в visual studio code)
-        log("Launched without minimizing to tray and other and other gui functions")
+            # Получение окна консоли
+            window = win32console.GetConsoleWindow()
+            
+            if Is_already_running():
+                log("WinYandexMusicRPC is already running.", LogType.Error)
+                WaitAndExit()
+            
+            # Установка заголовка окна консоли
+            win32console.SetConsoleTitle("WinYandexMusicRPC - Console")
+            
+            # Отключение кнопки закрытия консоли
+            Disable_close_button()
+            win32gui.ShowWindow(window, win32con.SW_SHOW)  # Показываем окно т.к оно свернуто с помощью "/min"
+            if window:
+                log("Minimize to system tray in 3 seconds...")
+                time.sleep(3)
+                win32gui.ShowWindow(window, win32con.SW_HIDE)  # Скрытие окна консоли
+            else:
+                log("Console window not found", LogType.Error)
+        else: # Запуск без exe (например в visual studio code)
+            log("Launched without minimizing to tray and other and other gui functions")
+        # Запуск Presence
+        Presence.start()
 
-    # Запуск Presence
-    presence = Presence()
-    presence.start()
+    except KeyboardInterrupt:
+        log("Keyboard interrupt received, stopping...")
+        Presence.stop()
