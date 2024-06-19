@@ -1,9 +1,13 @@
 # **<img src="./assets/tray.png" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
-Discord RPC для показа музыки которую вы сейчас слушаете на компьютере. Загрузка треков и их обложка происходит из Яндекс Музыки.  
-![discord](./img/screen1.png)
+[![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
 
-Есть похожие RPC которые показывают текущий трек используя Api Яндекс Музыки. Но они не могут показывать что играет из радио(например `Моя Волна`).
-Поэтому я создал скрипт который берет из `winsdk.windows.media.control` информацию о текущем треке, делает поиск в яндекс музыке и выводит трек в Discord.
+**Discord RPC для показа музыки которую вы сейчас слушаете на компьютере. Загрузка треков и их обложка происходит из Яндекс Музыки.**
+
+![discord](./img/screen1.png)  
+
+Существуют похожие RPC, которые показывают текущий трек, используя API Яндекс Музыки. Однако они не могут отображать информацию о том, что играет из радио (например, `Моя Волна`).
+
+Поэтому я создал скрипт, который использует `Windows.Media.Control` для получения информации о текущем треке, выполняет поиск в Яндекс Музыке и отображает трек в Discord.
 
 Плюсы по сравнению с другими скриптами:    
 Не нужен токен Яндекс Музыки ✅  
@@ -11,7 +15,7 @@ Discord RPC для показа музыки которую вы сейчас с
 Не ограничен использованием Яндекс Музыки, музыку можно слушать хоть из ВКонтакте ✅  
 Работает как с браузерами так и с приложениями ✅   
 Показывает статус паузы ✅  
-Показывает сколько осталось до конца трека ✅
+Показывает сколько осталось до конца трека ✅  
 
 ## Требования
 Работа проверена только на Windows 11 и Windows 10, на других версиях и платформах работать не будет. **С урезанными Lite и Custom версиями Windows работа не гарантируется.**
@@ -53,7 +57,7 @@ Discord RPC для показа музыки которую вы сейчас с
 ------------
 Пожалуйста, покажите вашу заинтересованность в этом проекте, что бы я мог его обновлять по мере возможности.
 
->Код не идеален, т.к питон не мой постоянный язык и писался скрипт только для личного пользования, но он может стать основой для ваших скриптов.
+>Код не идеален, так как Python не является моим основным языком, и скрипт писался для личного использования. Однако он может стать основой для ваших собственных скриптов.
 
 >За основу был взят код [yandex-music-rpc](https://github.com/schwarzalexey/yandex-music-rpc/tree/main)  
 >Используется [Yandex Music API](https://github.com/MarshalX/yandex-music-api)   
