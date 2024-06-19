@@ -23,7 +23,7 @@ from packaging import version
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v1.9.2"
+CURRENT_VERSION = "v2.0"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -102,7 +102,7 @@ class Presence:
             return None
         
     @staticmethod
-    def CheckDiscorAvailable() -> bool:
+    def discord_available() -> bool:
         while True:
             if Presence.is_discord_running():
                 Presence.rpc = Presence.connect_rpc() 
@@ -128,13 +128,13 @@ class Presence:
         Presence.currentTrack = None
         global name_prev
         name_prev = None
-        Presence.CheckDiscorAvailable()
+        Presence.discord_available()
             
             
     # Метод для запуска Rich Presence.
     @staticmethod
     def start() -> None:
-        Presence.CheckDiscorAvailable()
+        Presence.discord_available()
         Presence.client = Client().init()
         Presence.running = True
         Presence.currentTrack = None
