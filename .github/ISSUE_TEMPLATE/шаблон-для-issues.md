@@ -1,0 +1,17 @@
+---
+name: Шаблон для Issues
+about: Тут что то работает не так
+title: ''
+labels: ''
+assignees: ''
+
+---
+
+Я Столкнулся с проблемой: бла, бла, бла. 
+Что я сделал что бы получить эту проблему: Кликнул туда, сюда, тудым.
+
+Вот скриншот с логами скрипта:
+![image](https://github.com/FozerG/WinYandexMusicRPC/assets/123841942/42ad4a79-de5b-4080-b58d-2b0f7983797d)
+
+OS: Windows 10 LTSC 21H2 (чистая, не сборка)
+Браузер: Mozilla Firefox 127.0.1 (64-bit)
