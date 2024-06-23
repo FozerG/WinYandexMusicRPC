@@ -4,7 +4,7 @@ import pypresence
 import time
 from enum import Enum
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
-from yandex_music import Client
+from yandex_music import Client, exceptions
 from itertools import permutations
 import psutil
 import requests
@@ -18,21 +18,34 @@ import win32gui, win32con, win32console
 import subprocess
 from colorama import init, Fore, Style
 from packaging import version
+import getToken
+import keyring
+import json
+import re
 
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.0"
+CURRENT_VERSION = "v2.1"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
 
+# (Опционально) Личный токен Яндекс.Музыки с подпиской Плюс (https://github.com/MarshalX/yandex-music-api/discussions/513)
+# - Используется для поиска треков которые не показываются без авторизации 
+# - Используется при использовании скрипта из стран где бесплатная Яндекс.Музыка не работает
+ya_token = str()
+
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
 
+# --------- Переменные ниже являются временными и не требуют изменения.
 # Переменная для хранения предыдущего трека и избежания дублирования обновлений.
 name_prev = str()
+
+# Переменая для хранения полного пути к иконке
+icoPath = str()
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -134,8 +147,12 @@ class Presence:
     # Метод для запуска Rich Presence.
     @staticmethod
     def start() -> None:
+        global ya_token
         Presence.discord_available()
-        Presence.client = Client().init()
+        if Presence.client:
+            log("Initialize client with token...", LogType.Default)
+        else:
+            Presence.client = Client().init()
         Presence.running = True
         Presence.currentTrack = None
         while Presence.running:
@@ -286,10 +303,31 @@ class Presence:
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
-
         except Exception as exception:
-            log(f"Something happened: {exception}", LogType.Error)        
+            Handle_exception(exception)  
             return {'success': False}
+
+
+def Handle_exception(exception): # Обработка json ошибок из Yandex.Music
+    json_str = str(exception).replace("'", '"')
+    match = re.search(r'({.*?})', json_str)
+    if match:
+        json_str = match.group(1)
+        
+    try:
+        data = json.loads(json_str)
+        error_name = data.get('name')
+        if error_name:
+            if error_name == 'Unavailable For Legal Reasons':
+                log("You are using Yandex music in a country where it is not available without authorization! Turn off VPN or login using a Yandex token.", LogType.Error)    
+            elif error_name == 'session-expired':
+                log("Your Yandex token is out of date or incorrect, login again.", LogType.Error)  
+            else:
+                log(f"Something happened: {exception}", LogType.Error)
+        else:
+            log(f"Something happened: {exception}", LogType.Error)
+    except Exception:
+        log(f"Something happened: {exception}", LogType.Error)
 
 def WaitAndExit():
     if Is_run_by_exe():
@@ -357,10 +395,16 @@ def GetLastVersion(repoUrl):
 
 
 # Функция для переключения состояния strong_find
-def toggle_action(icon, item):
+def toggle_strong_find(icon, item):
     global strong_find
     strong_find = not strong_find
     log(f'Bool strong_find set state: {strong_find}')
+
+def toggle_console():
+    if win32gui.IsWindowVisible(window):
+        win32gui.ShowWindow(window, win32con.SW_HIDE)
+    else:
+        win32gui.ShowWindow(window, win32con.SW_SHOW)
 
 # Действия для кнопок
 def tray_click(icon, query):
@@ -368,7 +412,7 @@ def tray_click(icon, query):
         case "GitHub":
             webbrowser.open(REPO_URL,  new=2)
 
-        case "Show Console":
+        case "Hide/Show Console":
             win32gui.ShowWindow(window, win32con.SW_SHOW)
 
         case "Hide Console":
@@ -379,14 +423,60 @@ def tray_click(icon, query):
             icon.stop()
             win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
 
-def tray_thread():
-    tray_icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
+def get_account_name():
+    try:
+        user_info = Presence.client.me.account
+        account_name = user_info.display_name
+        if not account_name:
+            return f"None"
+        return account_name
+    except exceptions.UnauthorizedError:
+        return "Invalid token."
+    
+    except exceptions.NetworkError:
+        return "Network error."
+    
+    except Exception as e:
+        return f"None"
+
+
+# Функция для обновления имени аккаунта в меню
+def update_account_name(icon, new_account_name):
+    settingsMenu = pystray.Menu(
+        pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
+        pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
+        pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+    )
+    
+    icon.menu = pystray.Menu(
+        pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
+        pystray.MenuItem("Settings", settingsMenu),
         pystray.MenuItem("GitHub", tray_click),
-        pystray.MenuItem("Show Console", tray_click,default=True),
-        pystray.MenuItem("Hide Console", tray_click),
-        pystray.MenuItem('Toggle strong_find', toggle_action, checked=lambda item: strong_find),
-        pystray.MenuItem("Exit", tray_click)))
-    tray_icon.run()
+        pystray.MenuItem("Exit", tray_click)
+    )
+
+# Функция для создания иконки с меню
+def create_tray_icon():
+    tray_image = Image.open(Get_IconPath())
+    account_name = get_account_name()
+    
+    settingsMenu = pystray.Menu(
+        pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
+        pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
+        pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+    )
+    
+    icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
+        pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
+        pystray.MenuItem("Settings", settingsMenu),
+        pystray.MenuItem("GitHub", tray_click),
+        pystray.MenuItem("Exit", tray_click)
+    ))
+    return icon
+
+# Функция для запуска иконки в отдельном потоке
+def tray_thread(icon):
+    icon.run()
 
 def Is_already_running():
     hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC - Console")
@@ -430,6 +520,72 @@ def Is_run_by_exe():
     else:
         return False
 
+def Blur_string(s: str) -> str:
+    if s is None:
+        return ''  
+    if len(s) <= 8:
+        return s 
+    return s[:4] + '*' * (len(s) - 8) + s[-4:]
+
+def Remove_yaToken_From_Memmory():
+    if keyring.get_password('WinYandexMusicRPC', 'token') is not None:
+        keyring.delete_password('WinYandexMusicRPC', 'token')
+        log("Token deleted.", LogType.Update_Status)
+    else:
+        log("No token found.", LogType.Default)
+
+def Init_yaToken(forceGet = False):
+    global ya_token
+    token = str()
+
+    if forceGet:
+        try:
+            Remove_yaToken_From_Memmory()
+            token = getToken.update_token(Get_IconPath()) #При закрытии больше не открывается. Также при закрытии не возвращает токен. Кроме того, возникает предупреждение о главном потоке.
+            if token is not None and len(token) > 10:
+                keyring.set_password('WinYandexMusicRPC', 'token', token)
+                log(f"Successfully received the token: {Blur_string(token)}", LogType.Update_Status)
+        except Exception as exception:
+            log(f"Something happened when trying to initialize token: {exception}", LogType.Error)
+    else:
+        if not ya_token:
+            try:
+                token = keyring.get_password('WinYandexMusicRPC', 'token')
+                if token:
+                    log(f"Loaded token: {Blur_string(token)}", LogType.Update_Status)
+            except Exception as exception:
+                log(f"Something happened when trying to initialize token: {exception}", LogType.Error)
+        else:
+            token = ya_token
+            log(f"Loaded token from script: {Blur_string(token)}", LogType.Update_Status)
+
+    if token is not None and len(token) > 10:
+        ya_token = token
+        try:
+            Presence.client = Client(token=ya_token).init()
+            log(f"Logged in as - {get_account_name()}", LogType.Update_Status)
+            update_account_name(mainMenu, get_account_name())
+        except Exception as exception:
+            Handle_exception(exception)  
+    if not Presence.client:
+        log("Continue without a token...", LogType.Default)
+                
+
+
+def Get_IconPath():
+    try:
+        # Установка пути к ресурсам
+        if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
+            resources_path = sys._MEIPASS
+        else:
+            resources_path = os.path.dirname(os.path.abspath(__file__))
+
+        return f"{resources_path}/assets/tray.png"
+    except Exception:
+        return None
+    
+
+
 if __name__ == '__main__':
     try:
         if Is_run_by_exe():
@@ -437,18 +593,12 @@ if __name__ == '__main__':
             Set_ConsoleMode()
             log("Launched. Check the actual version...")
             GetLastVersion(REPO_URL)
-            # Установка пути к ресурсам
-            if getattr(sys, 'frozen', False):  # Запуск с помощью PyInstaller
-                resources_path = sys._MEIPASS
-            else:
-                resources_path = os.path.dirname(os.path.abspath(__file__))
-            
-            # Загрузка иконки для трея
-            tray_image = Image.open(f"{resources_path}/assets/tray.png")
 
             # Запуск потока для трея
-            tray_thread = threading.Thread(target=tray_thread)
-            tray_thread.start()
+            mainMenu = create_tray_icon()
+            icon_thread = threading.Thread(target=tray_thread, args=(mainMenu,))
+            icon_thread.daemon = True
+            icon_thread.start()
 
             # Получение окна консоли
             window = win32console.GetConsoleWindow()
@@ -471,9 +621,12 @@ if __name__ == '__main__':
                 log("Console window not found", LogType.Error)
         else: # Запуск без exe (например в visual studio code)
             log("Launched without minimizing to tray and other and other gui functions")
-        # Запуск Presence
-        Presence.start()
 
+        #Проверка наличия токена
+        Init_yaToken(False)
+        # Запуск Presence   
+        Presence.start()
+        
     except KeyboardInterrupt:
         log("Keyboard interrupt received, stopping...")
         Presence.stop()
