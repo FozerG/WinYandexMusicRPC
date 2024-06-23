@@ -9,3 +9,5 @@ yandex-music
 colorama
 pywin32
 packaging
+PyQt5
+keyring
