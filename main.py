@@ -1,27 +1,31 @@
-import asyncio
-from datetime import timedelta
-import pypresence
-import time
-from enum import Enum
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
-from yandex_music import Client, exceptions
 from itertools import permutations
-import psutil
-import requests
-import os
-import sys
+from packaging import version
+from datetime import timedelta
+from yandex_music import Client, exceptions
+from colorama import init, Fore, Style
+
+import multiprocessing
+import subprocess
 import webbrowser
 import pystray
-from PIL import Image
+import win32gui
+import win32con
+import win32console
 import threading
-import win32gui, win32con, win32console
-import subprocess
-from colorama import init, Fore, Style
-from packaging import version
+import pypresence
 import getToken
 import keyring
+import requests
+import asyncio
+import psutil
 import json
+import time
 import re
+import sys
+import os
+from enum import Enum
+from PIL import Image
 
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID = '978995592736944188'
@@ -46,6 +50,9 @@ name_prev = str()
 
 # Переменая для хранения полного пути к иконке
 icoPath = str()
+
+# Очередь для передачи результатов между процессами
+result_queue = multiprocessing.Queue()
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -412,12 +419,6 @@ def tray_click(icon, query):
         case "GitHub":
             webbrowser.open(REPO_URL,  new=2)
 
-        case "Hide/Show Console":
-            win32gui.ShowWindow(window, win32con.SW_SHOW)
-
-        case "Hide Console":
-            win32gui.ShowWindow(window, win32con.SW_HIDE)
-
         case "Exit":
             Presence.stop()
             icon.stop()
@@ -489,13 +490,25 @@ def Is_windows_11():
 
 
 def Check_conhost():
-    if Is_windows_11(): #Windows 11 имеет консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
-        if '--run-through-conhost' not in sys.argv: # Запущен ли скрипт уже через conhost
-            print("Wait a few seconds for the script to load.")
+    if Is_windows_11():  # Windows 11 имеет консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
+        if '--run-through-conhost' not in sys.argv:  # Запущен ли скрипт уже через conhost
+            print("Wait a few seconds for the script to load...")
             script_path = os.path.abspath(sys.argv[0])
-            subprocess.Popen(['start', '/min', 'conhost.exe', script_path, '--run-through-conhost'] + sys.argv[1:], shell=True)
-            time.sleep(2)
-            sys.exit()
+            first_pid = os.getpid()
+            subprocess.Popen(['start', '/min', 'conhost.exe', script_path, '--run-through-conhost', str(first_pid)] + sys.argv[1:], shell=True)
+            event = threading.Event()
+            event.wait()
+        else:   
+            if len(sys.argv) > 2:
+                first_pid = int(sys.argv[2])
+                try:
+                    parent_process = psutil.Process(first_pid)
+                    for child in parent_process.children(recursive=True):
+                        child.terminate()
+                    parent_process.terminate()
+                    parent_process.wait(timeout=3)
+                except Exception:
+                    print(f"Couldnt close the process: {first_pid}")
 
 def Disable_close_button():
     hwnd = win32console.GetConsoleWindow()
@@ -507,10 +520,8 @@ def Disable_close_button():
 def Set_ConsoleMode():
     hStdin = win32console.GetStdHandle(win32console.STD_INPUT_HANDLE)
     mode = hStdin.GetConsoleMode()
-
     # Отключить ENABLE_QUICK_EDIT_MODE, чтобы запретить выделение текста
     new_mode = mode & ~0x0040
-    # Установить новый режим ввода
     hStdin.SetConsoleMode(new_mode)
 
 def Is_run_by_exe():
@@ -530,9 +541,11 @@ def Blur_string(s: str) -> str:
 def Remove_yaToken_From_Memmory():
     if keyring.get_password('WinYandexMusicRPC', 'token') is not None:
         keyring.delete_password('WinYandexMusicRPC', 'token')
-        log("Token deleted.", LogType.Update_Status)
-    else:
-        log("No token found.", LogType.Default)
+        log("Old token has been removed from memory.", LogType.Update_Status)
+
+def update_token_task(icon_path, result_queue):
+    result = getToken.update_token(icon_path)
+    result_queue.put(result)
 
 def Init_yaToken(forceGet = False):
     global ya_token
@@ -541,7 +554,10 @@ def Init_yaToken(forceGet = False):
     if forceGet:
         try:
             Remove_yaToken_From_Memmory()
-            token = getToken.update_token(Get_IconPath()) #При закрытии больше не открывается. Также при закрытии не возвращает токен. Кроме того, возникает предупреждение о главном потоке.
+            process = multiprocessing.Process(target=update_token_task, args=(Get_IconPath(), result_queue))
+            process.start()
+            process.join()
+            token = result_queue.get()            
             if token is not None and len(token) > 10:
                 keyring.set_password('WinYandexMusicRPC', 'token', token)
                 log(f"Successfully received the token: {Blur_string(token)}", LogType.Update_Status)
@@ -587,15 +603,15 @@ def Get_IconPath():
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     try:
         if Is_run_by_exe():
             Check_conhost()
             Set_ConsoleMode()
             log("Launched. Check the actual version...")
             GetLastVersion(REPO_URL)
-
             # Запуск потока для трея
-            mainMenu = create_tray_icon()
+            mainMenu = create_tray_icon() 
             icon_thread = threading.Thread(target=tray_thread, args=(mainMenu,))
             icon_thread.daemon = True
             icon_thread.start()
@@ -622,7 +638,7 @@ if __name__ == '__main__':
         else: # Запуск без exe (например в visual studio code)
             log("Launched without minimizing to tray and other and other gui functions")
 
-        #Проверка наличия токена
+        # Проверка наличия токена в памяти
         Init_yaToken(False)
         # Запуск Presence   
         Presence.start()
