@@ -38,7 +38,7 @@
 2. В терминал пишем `python main.py`
 
 >Чтобы скомпилировать скрипт с помощью [Pyinstaller](https://pypi.org/project/pyinstaller/), выполните данную команду:  
-`pyinstaller main.spec` или `pyinstaller --onefile --add-data "assets\*;assets" --icon=assets\\tray.png main.py`
+`pyinstaller main.spec`
 
 
 ------------
