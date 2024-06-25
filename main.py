@@ -31,7 +31,7 @@ from PIL import Image
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.1"
+CURRENT_VERSION = "v2.1.3"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -498,17 +498,18 @@ def Check_conhost():
             subprocess.Popen(['start', '/min', 'conhost.exe', script_path, '--run-through-conhost', str(first_pid)] + sys.argv[1:], shell=True)
             event = threading.Event()
             event.wait()
-        else:   
-            if len(sys.argv) > 2:
-                first_pid = int(sys.argv[2])
-                try:
-                    parent_process = psutil.Process(first_pid)
-                    for child in parent_process.children(recursive=True):
-                        child.terminate()
-                    parent_process.terminate()
-                    parent_process.wait(timeout=3)
-                except Exception:
-                    print(f"Couldnt close the process: {first_pid}")
+
+    if '--run-through-launcher' in sys.argv or '--run-through-conhost' in sys.argv:  # Запущен ли скрипт уже через conhost или лаунчер
+        if len(sys.argv) > 2:
+            first_pid = int(sys.argv[2])
+            try:
+                parent_process = psutil.Process(first_pid)
+                for child in parent_process.children(recursive=True):
+                    child.terminate()
+                parent_process.terminate()
+                parent_process.wait(timeout=3)
+            except Exception:
+                print(f"Couldnt close the process: {first_pid}")
 
 def Disable_close_button():
     hwnd = win32console.GetConsoleWindow()
