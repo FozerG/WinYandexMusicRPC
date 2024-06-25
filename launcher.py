@@ -1,18 +1,25 @@
 # Этот скрипт предназначен исключительно для релизов. Он позволяет избежать долгой задержки перед print(), а также предотвращает двойную загрузку библиотек в память.
-# Для объеденения с main.exe используется Enigma Virutal Box
+# Для компиляции с main.exe используется "pyinstaller --clean launcher.spec"
 import os
 import sys
-import subprocess
 import threading
 import tempfile
 import shutil
 import hashlib
-import win32gui
+import psutil
+import win32console
 
-def Is_already_running():
-    hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC - Console")
-    if hwnd:
-        return True
+def Set_ConsoleMode():
+    hStdin = win32console.GetStdHandle(win32console.STD_INPUT_HANDLE)
+    mode = hStdin.GetConsoleMode()
+    # Отключить ENABLE_QUICK_EDIT_MODE, чтобы запретить выделение текста
+    new_mode = mode & ~0x0040
+    hStdin.SetConsoleMode(new_mode)
+
+def Is_already_running(executable_name):
+    for proc in psutil.process_iter(['name']):
+        if proc.info['name'] == executable_name:
+            return True
     return False
 
 def Is_windows_11():
@@ -28,12 +35,9 @@ def Сalculate_file_hash(file_path):
 def main():
     try:
         print("Initialize...")
-
-        if Is_already_running():
-            print("WinYandexMusicRPC is already running.")
-            return
+        Set_ConsoleMode()
         
-        current_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        current_path = sys._MEIPASS
         main_exe = os.path.join(current_path, "main.exe")
         
         if not os.path.exists(main_exe):
@@ -45,20 +49,25 @@ def main():
         if not os.path.exists(temp_dir):
             os.makedirs(temp_dir)
 
-        temp_main_exe = os.path.join(temp_dir, "main.exe")
-
+        temp_main_exe = os.path.join(temp_dir, "WinYandexMusicRPC.exe")
+        
         if os.path.exists(temp_main_exe):
+            if Is_already_running("WinYandexMusicRPC.exe"):
+                print("WinYandexMusicRPC is already running.")
+                return
             main_exe_hash = Сalculate_file_hash(main_exe)
             temp_main_exe_hash = Сalculate_file_hash(temp_main_exe)
             if main_exe_hash != temp_main_exe_hash:
                 os.remove(temp_main_exe)
                 shutil.copy2(main_exe, temp_main_exe)
+        else:
+            shutil.copy2(main_exe, temp_main_exe)
 
         first_pid = os.getpid()
         if Is_windows_11():
-            subprocess.Popen(['start', '/min', 'conhost.exe', temp_main_exe, '--run-through-conhost', str(first_pid)] + sys.argv[1:], shell=True)
+            os.system(f'start /min conhost.exe {temp_main_exe} --run-through-conhost {first_pid} {" ".join(sys.argv[1:])}')
         else:
-            subprocess.Popen(['cmd', '/c', 'start', '/min', 'cmd.exe', '/c', temp_main_exe, '--run-through-launcher', str(first_pid)] + sys.argv[1:], shell=True)
+            os.system(f'cmd /c start /min cmd.exe /c {temp_main_exe} --run-through-launcher {first_pid} {" ".join(sys.argv[1:])}')
             
         print("Wait a few seconds for the script to load...")
         event = threading.Event()
