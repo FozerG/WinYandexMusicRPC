@@ -1,5 +1,5 @@
 asyncio
-pypresence
+pypresence @ git+https://github.com/MCMi460/pypresence.git
 psutil
 requests
 pystray

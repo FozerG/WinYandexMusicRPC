@@ -31,7 +31,7 @@ from PIL import Image
 CLIENT_ID = '978995592736944188'
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.1.4"
+CURRENT_VERSION = "v2.2.1"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -53,6 +53,22 @@ icoPath = str()
 
 # Очередь для передачи результатов между процессами
 result_queue = multiprocessing.Queue()
+
+# Enum для конфигурации кнопок
+class ButtonConfig(Enum):
+    YANDEX_MUSIC = 1
+    YANDEX_MUSIC_APP = 2
+    BOTH = 3
+    NEITHER = 4
+
+# Enum для типа активности
+class ActivityTypeConfig(Enum):
+    PLAYING = 0
+    LISTENING = 2
+
+# Определяем настройки по умолчанию при первом запуске (в дальнейшем будут использоваться сохраненные настройки)
+activityType_config = ActivityTypeConfig.LISTENING
+button_config = ButtonConfig.YANDEX_MUSIC_APP
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -178,16 +194,22 @@ class Presence:
                         Presence.paused_time = 0
                         trackTime = currentTime
                         remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
-                        Presence.rpc.update(
-                            details=ongoing_track['title'],
-                            state=ongoing_track['artist'],
-                            end=currentTime + remainingTime,
-                            large_image=ongoing_track['og-image'],
-                            large_text=ongoing_track['album'],
+                        presence_args = {
+                            'activity_type': activityType_config.value,
+                            'details': ongoing_track['title'],
+                            'state': ongoing_track['artist'],
+                            'end': currentTime + remainingTime,
+                            'large_image': ongoing_track['og-image'],
+                            'large_text': ongoing_track['album']
+                        }
 
-                            buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}] #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
-                                                                                            #Если превысить лимит то Discord RPC не будет виден другим пользователям.
-                        )
+                        if button_config != ButtonConfig.NEITHER:
+                            presence_args['buttons'] = build_buttons(ongoing_track['link'])
+                        
+                        if activityType_config == ActivityTypeConfig.LISTENING:
+                            presence_args['large_text'] = f"Track length - {ongoing_track['formatted_duration']}"
+
+                        Presence.rpc.update(**presence_args)
                     else:
                         Presence.rpc.clear()
                         log(f"Clear RPC")
@@ -198,18 +220,24 @@ class Presence:
                     if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not Presence.paused:
                         Presence.paused = True
                         log(f"Track {ongoing_track['label']} on pause", LogType.Update_Status)
-
                         if ongoing_track['success']:
-                            Presence.rpc.update(
-                                details=ongoing_track['title'],
-                                state=ongoing_track['artist'],
-                                large_image=ongoing_track['og-image'],
-                                large_text=ongoing_track['album'],
-                                buttons=[{'label': 'Listen on Yandex.Music', 'url': ongoing_track['link']}], #Для текста кнопки есть ограничение в 32 байта. Кириллица считается за 2 байта.
-                                                                                            #Если превысить лимит то Discord RPC не будет виден другим пользователям.
-                                small_image="https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
-                                small_text="На паузе"
-                            )
+                            presence_args = {
+                                'activity_type': activityType_config.value,
+                                'details': ongoing_track['title'],
+                                'state': ongoing_track['artist'],
+                                'large_image': ongoing_track['og-image'],
+                                'large_text': ongoing_track['album'],
+                                'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
+                                'small_text': "On pause"
+                            }
+
+                            if button_config != ButtonConfig.NEITHER:
+                                presence_args['buttons'] = build_buttons(ongoing_track['link'])
+
+                            if activityType_config == ActivityTypeConfig.LISTENING and int(ongoing_track['start-time'].total_seconds()) != 0:
+                                presence_args['large_text'] = f"On pause {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
+                                
+                            Presence.rpc.update(**presence_args)
 
                     elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
                         log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
@@ -303,9 +331,9 @@ class Presence:
                     'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
                     'album':    Single_char(TrimString(track.albums[0].title,25)),
                     'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
-                    'duration': "Duration: None",
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
                     'durationSec': track.duration_ms // 1000,
+                    'formatted_duration': format_duration(track.duration_ms),
                     'start-time': startTime,
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
@@ -314,8 +342,43 @@ class Presence:
             Handle_exception(exception)  
             return {'success': False}
 
+def format_duration(duration_ms):
+    total_seconds = duration_ms // 1000
+    minutes = total_seconds // 60
+    seconds = total_seconds % 60
+    
+    # Форматирование строки
+    return f"{minutes}:{seconds:02}"
 
-def Handle_exception(exception): # Обработка json ошибок из Yandex.Music
+# ВНИМАНИЕ!
+# ДЛЯ ТЕКСТА КНОПКИ ЕСТЬ ОГРАНИЧЕНИЕ В 32 БАЙТА. КИРИЛЛИЦА СЧИТАЕТСЯ ЗА 2 БАЙТА.
+# ЕСЛИ ПРЕВЫСИТЬ ЛИМИТ ТО DISCORD RPC НЕ БУДЕТ ВИДЕН ДРУГИМ ПОЛЬЗОВАТЕЛЯМ!
+def build_buttons(url):
+    buttons = []
+    if button_config == ButtonConfig.YANDEX_MUSIC:
+        buttons.append({'label': 'Listen on Yandex Music', 'url': url})
+    elif button_config == ButtonConfig.YANDEX_MUSIC_APP:
+        deep_link = extract_deep_link(url)
+        buttons.append({'label': 'Listen on Yandex Music (in App)', 'url': deep_link})
+    elif button_config == ButtonConfig.BOTH:
+        buttons.append({'label': 'Listen on Yandex Music (Web)', 'url': url})
+        deep_link = extract_deep_link(url)
+        buttons.append({'label': 'Listen on Yandex Music (App)', 'url': deep_link})
+    return buttons
+
+def extract_deep_link(url):
+    pattern = r"https://music.yandex.ru/album/(\d+)/track/(\d+)"
+    match = re.match(pattern, url)
+    
+    if match:
+        album_id, track_id = match.groups()
+        share_track_path = f"album/{album_id}/track/{track_id}"
+        deep_share_track_url = "yandexmusic://" + share_track_path
+        return deep_share_track_url
+    else:
+        return None
+
+def Handle_exception(exception): # Обработка json ошибок из Yandex Music
     json_str = str(exception).replace("'", '"')
     match = re.search(r'({.*?})', json_str)
     if match:
@@ -581,7 +644,8 @@ def Init_yaToken(forceGet = False):
         try:
             Presence.client = Client(token=ya_token).init()
             log(f"Logged in as - {get_account_name()}", LogType.Update_Status)
-            update_account_name(mainMenu, get_account_name())
+            if Is_run_by_exe():
+                update_account_name(mainMenu, get_account_name())
         except Exception as exception:
             Handle_exception(exception)  
     if not Presence.client:
