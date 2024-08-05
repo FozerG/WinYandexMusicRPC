@@ -784,6 +784,8 @@ if __name__ == '__main__':
             Set_ConsoleMode()
             log("Launched. Check the actual version...")
             GetLastVersion(REPO_URL)
+            # Загрузка настроек
+            get_saves_settings(True)
             # Запуск потока для трея
             mainMenu = create_tray_icon() 
             icon_thread = threading.Thread(target=tray_thread, args=(mainMenu,))
@@ -814,8 +816,6 @@ if __name__ == '__main__':
 
         # Проверка наличия токена в памяти
         Init_yaToken(False)
-        # Загрузка настроек
-        get_saves_settings(True)
         # Запуск Presence   
         Presence.start()
         
