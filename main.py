@@ -1,4 +1,5 @@
 from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
+from config_manager import ConfigManager
 from itertools import permutations
 from packaging import version
 from datetime import timedelta
@@ -26,10 +27,10 @@ import sys
 import os
 from enum import Enum
 from PIL import Image
-
 # Идентификатор клиента Discord для Rich Presence
 CLIENT_ID_EN = '1269807014393942046' #Yandex Music
 CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
+CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
 CURRENT_VERSION = "v2.2.1"
@@ -55,6 +56,9 @@ icoPath = str()
 # Очередь для передачи результатов между процессами
 result_queue = multiprocessing.Queue()
 
+#Менеджер настроек
+config_manager = ConfigManager()
+
 # Enum для конфигурации кнопок
 class ButtonConfig(Enum):
     YANDEX_MUSIC = 1
@@ -72,10 +76,10 @@ class LanguageConfig(Enum):
     ENGLISH = 0
     RUSSIAN = 1
 
-# Определяем настройки по умолчанию при первом запуске (в дальнейшем будут использоваться сохраненные настройки)
-activityType_config = ActivityTypeConfig.LISTENING
-button_config = ButtonConfig.BOTH
-language_config = LanguageConfig.RUSSIAN
+# Глобальные настройки для RPC. Загружаются из метода get_saves_settings()
+activityType_config = None
+button_config = None
+language_config = None
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -131,7 +135,9 @@ class Presence:
     @staticmethod
     def connect_rpc():
         try:
-            rpc = pypresence.Presence(CLIENT_ID_EN if language_config == LanguageConfig.ENGLISH else CLIENT_ID_RU)
+            client_id = CLIENT_ID_EN if language_config == LanguageConfig.ENGLISH else \
+                CLIENT_ID_RU_DECLINED if activityType_config == ActivityTypeConfig.LISTENING else CLIENT_ID_RU
+            rpc = pypresence.Presence(client_id)
             rpc.connect()
             return rpc
         except pypresence.exceptions.DiscordNotFound:
@@ -519,6 +525,17 @@ def get_account_name():
     except Exception as e:
         return f"None"
 
+# Функция для загрузки сохраненных настроек. Если настройки отсутствуют, используются значения по умолчанию из fallback.
+def get_saves_settings():
+    global activityType_config
+    global button_config
+    global language_config
+    activityType_config = config_manager.get_enum_setting('UserSettings', 'activity_type', ActivityTypeConfig, fallback=ActivityTypeConfig.LISTENING)
+    button_config = config_manager.get_enum_setting('UserSettings', 'buttons_settings', ButtonConfig, fallback=ButtonConfig.BOTH)
+    language_config = config_manager.get_enum_setting('UserSettings', 'language', LanguageConfig, fallback=LanguageConfig.RUSSIAN)
+    
+    log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config}, button_config = {button_config}, language_config = {language_config}", LogType.Update_Status)
+    
 
 # Функция для обновления имени аккаунта в меню
 def update_account_name(icon, new_account_name):
@@ -721,6 +738,8 @@ if __name__ == '__main__':
 
         # Проверка наличия токена в памяти
         Init_yaToken(False)
+        # Загрузка настроек
+        get_saves_settings()
         # Запуск Presence   
         Presence.start()
         
