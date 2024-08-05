@@ -61,7 +61,7 @@ config_manager = ConfigManager()
 
 # Enum для конфигурации кнопок
 class ButtonConfig(Enum):
-    YANDEX_MUSIC = 1
+    YANDEX_MUSIC_WEB = 1
     YANDEX_MUSIC_APP = 2
     BOTH = 3
     NEITHER = 4
@@ -166,10 +166,20 @@ class Presence:
 
     @staticmethod
     def stop() -> None:
+        Presence.running = False
+        Presence.currentTrack = None
+        global name_prev
+        name_prev = None
         if Presence.rpc:
             Presence.rpc.close()
             Presence.rpc = None
-            Presence.running = False
+
+    @staticmethod
+    def restart() -> None:
+        log("Restarting RPC because settings have been changed...", LogType.Update_Status)
+        Presence.stop()
+        time.sleep(3)
+        Presence.start()
 
     @staticmethod
     def discord_was_closed() -> None:
@@ -283,7 +293,6 @@ class Presence:
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
-            
             artist = current_media_info.get("artist", "").strip()
             title = current_media_info.get("title", "").strip()
 
@@ -372,7 +381,7 @@ def format_duration(duration_ms):
 # ЕСЛИ ПРЕВЫСИТЬ ЛИМИТ ТО DISCORD RPC НЕ БУДЕТ ВИДЕН ДРУГИМ ПОЛЬЗОВАТЕЛЯМ!
 def build_buttons(url):
     buttons = []
-    if button_config == ButtonConfig.YANDEX_MUSIC:
+    if button_config == ButtonConfig.YANDEX_MUSIC_WEB:
         buttons.append({'label': 'Listen on Yandex Music' if language_config == LanguageConfig.ENGLISH else 'Откр. в браузере', 'url': url})
     elif button_config == ButtonConfig.YANDEX_MUSIC_APP:
         deep_link = extract_deep_link(url)
@@ -526,23 +535,75 @@ def get_account_name():
         return f"None"
 
 # Функция для загрузки сохраненных настроек. Если настройки отсутствуют, используются значения по умолчанию из fallback.
-def get_saves_settings():
+def get_saves_settings(fromStart = False):
     global activityType_config
     global button_config
     global language_config
     activityType_config = config_manager.get_enum_setting('UserSettings', 'activity_type', ActivityTypeConfig, fallback=ActivityTypeConfig.LISTENING)
     button_config = config_manager.get_enum_setting('UserSettings', 'buttons_settings', ButtonConfig, fallback=ButtonConfig.BOTH)
     language_config = config_manager.get_enum_setting('UserSettings', 'language', LanguageConfig, fallback=LanguageConfig.RUSSIAN)
+    if fromStart:
+        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}", LogType.Update_Status)
     
-    log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config}, button_config = {button_config}, language_config = {language_config}", LogType.Update_Status)
+# Функция для создания меню на основе переданных параметров
+def create_enum_menu(enum_class, get_setting_func, set_setting_func):
+    return pystray.Menu(
+        *(pystray.MenuItem(value.name,
+                           lambda item, value=value: set_setting_func(value),
+                           checked=lambda item, value=value: get_setting_func('UserSettings', enum_class) == value)
+          for value in enum_class)
+    )
+
+def convert_to_enum(enum_class, value):
+    value_str = str(value)
+    try:
+        return enum_class[value_str]
+    except KeyError:
+        log(f"Invalid type: {value_str}")
+        return None
+
+# Функции для установки значений
+def set_activity_type(value):
+    value = convert_to_enum(ActivityTypeConfig, value)
+    config_manager.set_enum_setting('UserSettings', 'activity_type', value)
+    log(f"Setting has been changed : activity_type to {value.name}")
+    get_saves_settings()
+    Presence.restart()
+
+def set_button_config(value):
+    value = convert_to_enum(ButtonConfig, value)
+    config_manager.set_enum_setting('UserSettings', 'buttons_settings', value)
+    log(f"Setting has been changed : buttons_settings to {value.name}")
+    get_saves_settings()
+    Presence.restart()
+
+def set_language_config(value):
+    value = convert_to_enum(LanguageConfig, value)
+    config_manager.set_enum_setting('UserSettings', 'language', value)
+    log(f"Setting has been changed : language to {value.name}")
+    get_saves_settings()
+    Presence.restart()
+
+# Функция для создания настроек меню RPC
+def create_rpc_settings_menu():
+    activity_type_menu = create_enum_menu(ActivityTypeConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'activity_type', enum_type), set_activity_type)
+    button_config_menu = create_enum_menu(ButtonConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'buttons_settings', enum_type), set_button_config)
+    language_config_menu = create_enum_menu(LanguageConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'language', enum_type), set_language_config)
     
+    return pystray.Menu(
+        pystray.MenuItem('Activity Type', activity_type_menu),
+        pystray.MenuItem('RPC Buttons', button_config_menu),
+        pystray.MenuItem("RPC Language", language_config_menu),
+    )
 
 # Функция для обновления имени аккаунта в меню
 def update_account_name(icon, new_account_name):
+    rpcSettingsMenu = create_rpc_settings_menu()
     settingsMenu = pystray.Menu(
         pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+        pystray.MenuItem("Status settings", rpcSettingsMenu),
     )
     
     icon.menu = pystray.Menu(
@@ -556,11 +617,13 @@ def update_account_name(icon, new_account_name):
 def create_tray_icon():
     tray_image = Image.open(Get_IconPath())
     account_name = get_account_name()
+    rpcSettingsMenu = create_rpc_settings_menu()
     
     settingsMenu = pystray.Menu(
         pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+        pystray.MenuItem("Status settings", rpcSettingsMenu),
     )
     
     icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
@@ -739,7 +802,7 @@ if __name__ == '__main__':
         # Проверка наличия токена в памяти
         Init_yaToken(False)
         # Загрузка настроек
-        get_saves_settings()
+        get_saves_settings(True)
         # Запуск Presence   
         Presence.start()
         
