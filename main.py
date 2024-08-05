@@ -28,7 +28,8 @@ from enum import Enum
 from PIL import Image
 
 # Идентификатор клиента Discord для Rich Presence
-CLIENT_ID = '978995592736944188'
+CLIENT_ID_EN = '1269807014393942046' #Yandex Music
+CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
 CURRENT_VERSION = "v2.2.1"
@@ -66,9 +67,15 @@ class ActivityTypeConfig(Enum):
     PLAYING = 0
     LISTENING = 2
 
+# Enum для выбора языка RPC
+class LanguageConfig(Enum):
+    ENGLISH = 0
+    RUSSIAN = 1
+
 # Определяем настройки по умолчанию при первом запуске (в дальнейшем будут использоваться сохраненные настройки)
 activityType_config = ActivityTypeConfig.LISTENING
-button_config = ButtonConfig.YANDEX_MUSIC_APP
+button_config = ButtonConfig.BOTH
+language_config = LanguageConfig.RUSSIAN
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -124,7 +131,7 @@ class Presence:
     @staticmethod
     def connect_rpc():
         try:
-            rpc = pypresence.Presence(CLIENT_ID)
+            rpc = pypresence.Presence(CLIENT_ID_EN if language_config == LanguageConfig.ENGLISH else CLIENT_ID_RU)
             rpc.connect()
             return rpc
         except pypresence.exceptions.DiscordNotFound:
@@ -207,7 +214,9 @@ class Presence:
                             presence_args['buttons'] = build_buttons(ongoing_track['link'])
                         
                         if activityType_config == ActivityTypeConfig.LISTENING:
-                            presence_args['large_text'] = f"Track length - {ongoing_track['formatted_duration']}"
+                            presence_args['large_text'] = f"{'Track length' if language_config == LanguageConfig.ENGLISH else 'Длительность'} - {ongoing_track['formatted_duration']}"
+                            presence_args['small_image'] = "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Playing.png"
+                            presence_args['small_text'] = "Playing" if language_config == LanguageConfig.ENGLISH else "Проигрывается"
 
                         Presence.rpc.update(**presence_args)
                     else:
@@ -227,16 +236,18 @@ class Presence:
                                 'state': ongoing_track['artist'],
                                 'large_image': ongoing_track['og-image'],
                                 'large_text': ongoing_track['album'],
-                                'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/pause.png",
-                                'small_text': "On pause"
+                                'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Paused.png",
+                                'small_text': "On pause" if language_config == LanguageConfig.ENGLISH else "На паузе"
                             }
 
                             if button_config != ButtonConfig.NEITHER:
                                 presence_args['buttons'] = build_buttons(ongoing_track['link'])
 
                             if activityType_config == ActivityTypeConfig.LISTENING and int(ongoing_track['start-time'].total_seconds()) != 0:
-                                presence_args['large_text'] = f"On pause {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
-                                
+                                presence_args['large_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
+                            if int(ongoing_track['start-time'].total_seconds()) != 0:
+                                presence_args['small_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
+
                             Presence.rpc.update(**presence_args)
 
                     elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
@@ -356,14 +367,19 @@ def format_duration(duration_ms):
 def build_buttons(url):
     buttons = []
     if button_config == ButtonConfig.YANDEX_MUSIC:
-        buttons.append({'label': 'Listen on Yandex Music', 'url': url})
+        buttons.append({'label': 'Listen on Yandex Music' if language_config == LanguageConfig.ENGLISH else 'Откр. в браузере', 'url': url})
     elif button_config == ButtonConfig.YANDEX_MUSIC_APP:
         deep_link = extract_deep_link(url)
-        buttons.append({'label': 'Listen on Yandex Music (in App)', 'url': deep_link})
+        buttons.append({'label': 'Listen on Yandex Music (in App)' if language_config == LanguageConfig.ENGLISH else 'Откр. в прилож.', 'url': deep_link})
     elif button_config == ButtonConfig.BOTH:
-        buttons.append({'label': 'Listen on Yandex Music (Web)', 'url': url})
+        buttons.append({'label': 'Listen on Yandex Music (Web)' if language_config == LanguageConfig.ENGLISH else 'Откр. в браузере', 'url': url})
         deep_link = extract_deep_link(url)
-        buttons.append({'label': 'Listen on Yandex Music (App)', 'url': deep_link})
+        buttons.append({'label': 'Listen on Yandex Music (App)' if language_config == LanguageConfig.ENGLISH else 'Откр. в прилож.', 'url': deep_link})
+
+    for button in buttons:
+        label = button['label']
+        if len(label.encode('utf-8')) > 32:
+            raise ValueError(f"Label '{label}' exceeds 32 bytes")
     return buttons
 
 def extract_deep_link(url):
