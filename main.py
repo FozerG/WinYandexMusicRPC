@@ -812,6 +812,7 @@ if __name__ == '__main__':
             else:
                 log("Console window not found", LogType.Error)
         else: # Запуск без exe (например в visual studio code)
+            get_saves_settings(True) # Загрузка настроек
             log("Launched without minimizing to tray and other and other gui functions")
 
         # Проверка наличия токена в памяти
