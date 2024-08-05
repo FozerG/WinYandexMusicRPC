@@ -56,6 +56,9 @@ icoPath = str()
 # Очередь для передачи результатов между процессами
 result_queue = multiprocessing.Queue()
 
+# Переменная для проверки необходимости запуска рестарта в главном потоке Presence
+needRestart = False
+
 #Менеджер настроек
 config_manager = ConfigManager()
 
@@ -166,20 +169,27 @@ class Presence:
 
     @staticmethod
     def stop() -> None:
-        Presence.running = False
+        if Presence.rpc:
+            Presence.rpc.close()
+            Presence.rpc = None
+            Presence.running = False
+
+    @staticmethod
+    def need_restart() -> None:
+        log("Restarting RPC because settings have been changed...", LogType.Update_Status)
+        global needRestart
+        needRestart = True
+
+    @staticmethod
+    def restart() -> None:
         Presence.currentTrack = None
         global name_prev
         name_prev = None
         if Presence.rpc:
             Presence.rpc.close()
             Presence.rpc = None
-
-    @staticmethod
-    def restart() -> None:
-        log("Restarting RPC because settings have been changed...", LogType.Update_Status)
-        Presence.stop()
         time.sleep(3)
-        Presence.start()
+        Presence.discord_available()
 
     @staticmethod
     def discord_was_closed() -> None:
@@ -187,13 +197,13 @@ class Presence:
         Presence.currentTrack = None
         global name_prev
         name_prev = None
-        Presence.discord_available()
-            
+        Presence.discord_available()    
             
     # Метод для запуска Rich Presence.
     @staticmethod
     def start() -> None:
         global ya_token
+        global needRestart
         Presence.discord_available()
         if Presence.client:
             log("Initialize client with token...", LogType.Default)
@@ -205,6 +215,9 @@ class Presence:
             currentTime = time.time()
             if not Presence.is_discord_running():
                 Presence.discord_was_closed() 
+            if needRestart:
+                needRestart = False
+                Presence.restart()
             try:
                 ongoing_track = Presence.getTrack()
                 if Presence.currentTrack != ongoing_track: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
@@ -568,21 +581,21 @@ def set_activity_type(value):
     config_manager.set_enum_setting('UserSettings', 'activity_type', value)
     log(f"Setting has been changed : activity_type to {value.name}")
     get_saves_settings()
-    Presence.restart()
+    Presence.need_restart()
 
 def set_button_config(value):
     value = convert_to_enum(ButtonConfig, value)
     config_manager.set_enum_setting('UserSettings', 'buttons_settings', value)
     log(f"Setting has been changed : buttons_settings to {value.name}")
     get_saves_settings()
-    Presence.restart()
+    Presence.need_restart()
 
 def set_language_config(value):
     value = convert_to_enum(LanguageConfig, value)
     config_manager.set_enum_setting('UserSettings', 'language', value)
     log(f"Setting has been changed : language to {value.name}")
     get_saves_settings()
-    Presence.restart()
+    Presence.need_restart()
 
 # Функция для создания настроек меню RPC
 def create_rpc_settings_menu():
@@ -603,12 +616,12 @@ def update_account_name(icon, new_account_name):
         pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
-        pystray.MenuItem("Status settings", rpcSettingsMenu),
     )
     
     icon.menu = pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
-        pystray.MenuItem("Settings", settingsMenu),
+        pystray.MenuItem("Yandex settings", settingsMenu),
+        pystray.MenuItem("RPC settings", rpcSettingsMenu),
         pystray.MenuItem("GitHub", tray_click),
         pystray.MenuItem("Exit", tray_click)
     )
@@ -623,12 +636,12 @@ def create_tray_icon():
         pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
-        pystray.MenuItem("Status settings", rpcSettingsMenu),
     )
     
     icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
-        pystray.MenuItem("Settings", settingsMenu),
+        pystray.MenuItem("Yandex settings", settingsMenu),
+        pystray.MenuItem("RPC settings", rpcSettingsMenu),
         pystray.MenuItem("GitHub", tray_click),
         pystray.MenuItem("Exit", tray_click)
     ))
