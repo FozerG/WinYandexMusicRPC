@@ -33,7 +33,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.2.1"
+CURRENT_VERSION = "v2.2.2"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -339,11 +339,15 @@ class Presence:
 
                 # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
                 artists = trackFromSearch.artists_name()
-                all_variants = list(permutations(artists))
-                all_variants = [list(variant) for variant in all_variants]
-                findTrackNames = []
-                for variant in all_variants:
-                    findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
+                if len(artists) <= 4:
+                    all_variants = [list(variant) for variant in permutations(artists)]
+                    findTrackNames = []
+                    for variant in all_variants:
+                        findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
+                else:
+                    findTrackNames = []
+                    findTrackNames.append(', '.join(artists) + " - " + trackFromSearch.title)
+
                 # Также может отличаться регистр, так что приведём всё в один регистр.    
                 boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
 
