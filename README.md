@@ -1,12 +1,10 @@
 # **<img src="./assets/tray.png" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
 [![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
 
+
 **Discord RPC для показа музыки которую вы сейчас слушаете на компьютере. Загрузка треков и их обложка происходит из Яндекс Музыки.**
 
-Варинты отображения статуса:  
-
-<img src="https://github.com/user-attachments/assets/5f456588-301e-46d0-822c-b52a2a838c34" alt="discord" width="340">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="https://github.com/user-attachments/assets/71aea87b-3950-4b80-8c7b-4741a8bcef39" alt="discord" width="340">
+<img src="https://github.com/user-attachments/assets/99d15c70-632f-41ec-a6cd-49de8a7d2a8f" alt="discord" width="340">
 
 Существуют похожие RPC, которые показывают текущий трек, используя API Яндекс Музыки. Однако они не могут отображать информацию о том, что играет из радио (например, `Моя Волна`).
 
