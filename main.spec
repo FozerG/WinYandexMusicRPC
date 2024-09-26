@@ -6,7 +6,12 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('assets\\*', 'assets')],
-    hiddenimports=[],
+        hiddenimports=[
+        'winrt.windows.foundation.collections',
+        'winrt.windows.foundation',
+        'winrt.windows.storage.streams',
+        'winrt.windows.media.control',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

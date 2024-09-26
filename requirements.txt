@@ -1,13 +1,19 @@
-asyncio
-pypresence @ git+https://github.com/MCMi460/pypresence.git
-psutil
-requests
-pystray
-Pillow
-winsdk
+pypresence @ git+https://github.com/qwertyquerty/pypresence.git
+winrt-Windows.Foundation.Collections
+winrt-Windows.Storage.Streams
+winrt-Windows.Media.Control
+winrt-Windows.Foundation
 yandex-music
-colorama
-pywin32
-packaging
+winrt-Windows.Media
+winrt-runtime
+winrt-sdk
 PyQt5
+pywin32
+pystray
+psutil
+colorama
+packaging
+requests
+asyncio
 keyring
+Pillow

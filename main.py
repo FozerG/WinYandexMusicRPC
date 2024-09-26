@@ -1,4 +1,4 @@
-from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
+from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
 from config_manager import ConfigManager
 from itertools import permutations
 from packaging import version
@@ -33,7 +33,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.2.2"
+CURRENT_VERSION = "v2.3"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -93,34 +93,26 @@ class PlaybackStatus(Enum):
     Playing = 4
     Stopped = 5
 
-# Функция для получения стартовой позиции начала трека
-def get_timeline_position():
-    async def async_get_timeline_position():
-        sessions = await MediaManager.request_async()
-        current_session = sessions.get_current_session()
-        if current_session:
-            position = current_session.get_timeline_properties().position
-            return position
-        else:
-            return timedelta(seconds=0)
-    
-    return asyncio.run(async_get_timeline_position())
-
 # Функция для получения информации о мультимедийном контенте через Windows SDK
-def get_media_info():
-    async def async_get_media_info():
-        sessions = await MediaManager.request_async()
-        current_session = sessions.get_current_session()
-        if current_session:
-            info = await current_session.try_get_media_properties_async()
-            info_dict = {song_attr: getattr(info, song_attr) for song_attr in dir(info) if not song_attr.startswith('_')}
-            info_dict['genres'] = list(info_dict['genres'])
-            playback_status = PlaybackStatus(current_session.get_playback_info().playback_status)
-            info_dict['playback_status'] = playback_status.name
-            return info_dict
-        raise Exception('The music is not playing right now.')
-    
-    return asyncio.run(async_get_media_info())
+async def get_media_info():
+    sessions = await MediaManager.request_async()
+    current_session = sessions.get_current_session()
+
+    if current_session:
+        info = await current_session.try_get_media_properties_async()
+        artist = info.artist
+        title = info.title
+        position = current_session.get_timeline_properties().position
+        playback_info = current_session.get_playback_info()
+        playback_status = PlaybackStatus(playback_info.playback_status).name
+        return {
+            'artist': artist,
+            'title': title,
+            'playback_status': playback_status,
+            'position': position
+        }
+
+    raise Exception('The music is not playing right now.')
 
 class Presence:
     client = None
@@ -229,23 +221,25 @@ class Presence:
                             log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
                         Presence.paused_time = 0
                         trackTime = currentTime
-                        remainingTime = ongoing_track['durationSec'] - int(ongoing_track['start-time'].total_seconds())
+                        start_time = currentTime - int(ongoing_track['start-time'].total_seconds())
+                        end_time = start_time + ongoing_track['durationSec']
                         presence_args = {
                             'activity_type': activityType_config.value,
                             'details': ongoing_track['title'],
                             'state': ongoing_track['artist'],
-                            'end': currentTime + remainingTime,
+                            'start': start_time,
+                            'end': end_time,
                             'large_image': ongoing_track['og-image'],
                             'large_text': ongoing_track['album']
                         }
 
                         if button_config != ButtonConfig.NEITHER:
                             presence_args['buttons'] = build_buttons(ongoing_track['link'])
-                        
+                            
                         if activityType_config == ActivityTypeConfig.LISTENING:
-                            presence_args['large_text'] = f"{'Track length' if language_config == LanguageConfig.ENGLISH else 'Длительность'} - {ongoing_track['formatted_duration']}"
                             presence_args['small_image'] = "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Playing.png"
                             presence_args['small_text'] = "Playing" if language_config == LanguageConfig.ENGLISH else "Проигрывается"
+
 
                         Presence.rpc.update(**presence_args)
                     else:
@@ -302,13 +296,13 @@ class Presence:
     @staticmethod
     def getTrack() -> dict:
         try:
-            current_media_info = get_media_info()
+            current_media_info = asyncio.run(get_media_info())
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
             artist = current_media_info.get("artist", "").strip()
             title = current_media_info.get("title", "").strip()
-
+            position = current_media_info['position']
             if not artist or not title:
                 log("Winsdk returned empty string for artist or title", LogType.Error)
                 return {'success': False}
@@ -319,13 +313,12 @@ class Presence:
                 log("Now listening to " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
                 currentTrack_copy = Presence.currentTrack.copy()
-                position = get_timeline_position()
                 currentTrack_copy["start-time"] = position
                 currentTrack_copy["playback"] = current_media_info['playback_status']
                 return currentTrack_copy
 
             name_prev = str(name_current)
-            search = Presence.client.search(name_current, True, "all", 0, False)
+            search = Presence.client.search(name_current.replace("'", " "), True, "all", 0, False)
 
             if search.tracks is None:
                 log(f"Can't find the song: {name_current}")
@@ -366,7 +359,6 @@ class Presence:
 
             track = finalTrack
             trackId = track.trackId.split(":")
-            startTime = get_timeline_position()
             if track:
                 return {
                     'success': True,
@@ -377,7 +369,7 @@ class Presence:
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
                     'durationSec': track.duration_ms // 1000,
                     'formatted_duration': format_duration(track.duration_ms),
-                    'start-time': startTime,
+                    'start-time': position,
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
