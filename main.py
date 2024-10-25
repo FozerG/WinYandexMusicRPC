@@ -303,7 +303,7 @@ class Presence:
             artist = current_media_info.get("artist", "").strip()
             title = current_media_info.get("title", "").strip()
             position = current_media_info['position']
-            if not artist or not title:
+            if not artist and not title: # Так как на данном этапе 
                 log("Winsdk returned empty string for artist or title", LogType.Error)
                 return {'success': False}
             name_current = artist + " - " + title
@@ -319,30 +319,41 @@ class Presence:
 
             name_prev = str(name_current)
             search = Presence.client.search(name_current.replace("'", " "), True, "all", 0, False)
+            # Так как Client.search с фильтром "all" не ищет подкасты, то делаем отдельный поиск для подкастов
+            search_podcast = Presence.client.search(name_current.replace("'", " ")[17:], True, "podcast_episode", 0, False)
 
-            if search.tracks is None:
+            print(search)
+            
+            if search.tracks: tracks = search.tracks
+            elif search_podcast.podcast_episodes: tracks = search_podcast.podcast_episodes
+            else: 
                 log(f"Can't find the song: {name_current}")
                 return {'success': False}
+            
 
             finalTrack = None
             debugStr = []
-            for index, trackFromSearch in enumerate(search.tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
-                if trackFromSearch.type not in ['music', 'track', 'podcast_episode']:
+            for index, trackFromSearch in enumerate(tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
+                if trackFromSearch.type not in ['music', 'track', 'podcast-episode']:
                     debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong type.")
 
                 # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
-                artists = trackFromSearch.artists_name()
-                if len(artists) <= 4:
-                    all_variants = [list(variant) for variant in permutations(artists)]
-                    findTrackNames = []
-                    for variant in all_variants:
-                        findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
-                else:
-                    findTrackNames = []
-                    findTrackNames.append(', '.join(artists) + " - " + trackFromSearch.title)
-
-                # Также может отличаться регистр, так что приведём всё в один регистр.    
-                boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
+                if search.tracks:
+                    artists = trackFromSearch.artists_name()
+                    if len(artists) <= 4:
+                        all_variants = [list(variant) for variant in permutations(artists)]
+                        findTrackNames = []
+                        for variant in all_variants:
+                            findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
+                    else:
+                        findTrackNames = []
+                        findTrackNames.append(', '.join(artists) + " - " + trackFromSearch.title)
+                else: # Podcast. Так как апишка не ищет исполнителей, то мы скипаем данный этап
+                    findTrackNames = [trackFromSearch.title]
+                
+                # Также может отличаться регистр, так что приведём всё в один регистр.
+                # Podcast. Также при проверке подкаста убираем дефолтный стринг "Подкаст или книга" при помощи name_current[17:]
+                boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames) if search.tracks else any(name_current[17:].lower() == element.lower() for element in findTrackNames)
 
                 if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
                     findTrackName = ', '.join([str(elem) for elem in trackFromSearch.artists_name()]) + " - " + trackFromSearch.title
@@ -363,7 +374,7 @@ class Presence:
                 return {
                     'success': True,
                     'title': Single_char(TrimString(track.title, 40)),
-                    'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
+                    'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}" or "Подкаст или книга",40)),
                     'album':    Single_char(TrimString(track.albums[0].title,25)),
                     'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
                     'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
