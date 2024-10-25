@@ -5,6 +5,8 @@ from packaging import version
 from datetime import timedelta
 from yandex_music import Client, exceptions
 from colorama import init, Fore, Style
+from win32com.client import Dispatch  # Импортируем Dispatch для создания COM объекта
+
 
 import multiprocessing
 import subprocess
@@ -25,6 +27,10 @@ import time
 import re
 import sys
 import os
+import winreg
+import shutil
+import threading
+import pythoncom
 from enum import Enum
 from PIL import Image
 # Идентификатор клиента Discord для Rich Presence
@@ -45,6 +51,9 @@ ya_token = str()
 
 # Флаг для поиска трека с 100% совпадением названия и автора. Иначе будет найден близкий результат.
 strong_find = True
+
+# Флаг для настройки автозапуска с компьютером
+auto_start_windows = False
 
 # --------- Переменные ниже являются временными и не требуют изменения.
 # Переменная для хранения предыдущего трека и избежания дублирования обновлений.
@@ -510,6 +519,68 @@ def toggle_strong_find(icon, item):
     strong_find = not strong_find
     log(f'Bool strong_find set state: {strong_find}')
 
+# Функция для переключения состояния strong_find
+def toggle_auto_start_windows(icon, item):
+    global auto_start_windows
+    auto_start_windows = not auto_start_windows
+    log(f'Bool auto_start_windows set state: {auto_start_windows}')
+    
+    def create_shortcut(target, shortcut_path, description=""):
+        pythoncom.CoInitialize()  # Инициализируем COM библиотеки
+        shell = Dispatch('WScript.Shell')  # Создаем объект для работы с ярлыками
+        shortcut = shell.CreateShortcut(shortcut_path)  # Создаем ярлык
+        shortcut.TargetPath = target  # Устанавливаем путь к исполняемому файлу
+        shortcut.WorkingDirectory = os.path.dirname(target)  # Устанавливаем рабочую директорию
+        shortcut.Description = description  # Устанавливаем описание ярлыка
+        shortcut.Save()  # Сохраняем ярлык
+
+    def change_setting(tglle: bool): # Выношу в отдельную функцию, чтобы иметь возможность запустить в отдельном потоке,
+        if tglle:# ДВА способа добавления в автозапуск. Первый через добавление программы в папку автостарта. Второй через изменение реестра. Оба не требуют админских прав.
+            try: # Автозапуск через добавление в папку автозапуска
+                exe_path = os.path.abspath(sys.argv[0])  # Получаем абсолютный путь к текущему исполняемому файлу
+                shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')  # Определяем путь для ярлыка в автозагрузке
+                create_shortcut(exe_path, shortcut_path)  # Создаем ярлык в автозагрузке
+            except: # Автозапуск через изменение в реестре
+                exe_path = os.path.abspath(sys.argv[0])  # Получаем абсолютный путь к текущему исполняемому файлу
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_SET_VALUE)  # Открываем ключ реестра для автозапуска программ
+                winreg.SetValueEx(key, 'YaMusicRPC', 0, winreg.REG_SZ, exe_path)  # Устанавливаем новый параметр в реестре с именем 'YaMusicRPC' и значением пути к исполняемому файлу
+                winreg.CloseKey(key)  # Закрываем ключ реестра
+        else: # Удаляем оба метода
+            # Удаляем ярлык из автозагрузки
+            shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')
+            if os.path.exists(shortcut_path):
+                os.remove(shortcut_path)
+
+            # Удаляем запись из реестра
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_ALL_ACCESS)
+                winreg.DeleteValue(key, 'YaMusicRPC')
+                winreg.CloseKey(key)
+            except FileNotFoundError:
+                pass
+            
+        
+    threading.Thread(target=change_setting, args=[auto_start_windows]).start() # Запускаем в отдельном потоке для оптимизации
+
+
+
+def is_in_autostart():
+    
+    def is_in_startup():
+        shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')  # Определяем путь к ярлыку
+        return os.path.exists(shortcut_path)  # Проверяем, существует ли ярлык в папке автозагрузки
+
+    def is_in_registry():
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\Microsoft\Windows\CurrentVersion\Run', 0, winreg.KEY_READ)  # Открываем ключ реестра для чтения
+            winreg.QueryValueEx(key, 'YaMusicRPC')  # Проверяем, существует ли параметр в реестре
+            winreg.CloseKey(key)  # Закрываем ключ реестра
+            return True
+        except FileNotFoundError:
+            return False  # Если параметр не найден, возвращаем False
+    
+    return is_in_startup() or is_in_registry()  # Возвращаем True, если программа присутствует в автозапуске
+        
 def toggle_console():
     if win32gui.IsWindowVisible(window):
         win32gui.ShowWindow(window, win32con.SW_HIDE)
@@ -548,6 +619,9 @@ def get_saves_settings(fromStart = False):
     global activityType_config
     global button_config
     global language_config
+    global auto_start_windows
+    
+    auto_start_windows = is_in_autostart()
     activityType_config = config_manager.get_enum_setting('UserSettings', 'activity_type', ActivityTypeConfig, fallback=ActivityTypeConfig.LISTENING)
     button_config = config_manager.get_enum_setting('UserSettings', 'buttons_settings', ButtonConfig, fallback=ButtonConfig.BOTH)
     language_config = config_manager.get_enum_setting('UserSettings', 'language', LanguageConfig, fallback=LanguageConfig.RUSSIAN)
@@ -612,6 +686,7 @@ def update_account_name(icon, new_account_name):
         pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
     )
     
     icon.menu = pystray.Menu(
@@ -632,6 +707,7 @@ def create_tray_icon():
         pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
+        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
     )
     
     icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
