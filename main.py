@@ -677,6 +677,7 @@ def create_rpc_settings_menu():
         pystray.MenuItem('Activity Type', activity_type_menu),
         pystray.MenuItem('RPC Buttons', button_config_menu),
         pystray.MenuItem("RPC Language", language_config_menu),
+        pystray.MenuItem('Start RPC with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
     )
 
 # Функция для обновления имени аккаунта в меню
@@ -685,8 +686,7 @@ def update_account_name(icon, new_account_name):
     settingsMenu = pystray.Menu(
         pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
-        pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
-        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
+        pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find)
     )
     
     icon.menu = pystray.Menu(
