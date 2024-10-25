@@ -519,7 +519,7 @@ def toggle_strong_find(icon, item):
     strong_find = not strong_find
     log(f'Bool strong_find set state: {strong_find}')
 
-# Функция для переключения состояния strong_find
+# Функция для переключения состояния auto_start_windows
 def toggle_auto_start_windows(icon, item):
     global auto_start_windows
     auto_start_windows = not auto_start_windows
@@ -564,7 +564,7 @@ def toggle_auto_start_windows(icon, item):
 
 
 
-def is_in_autostart():
+def is_in_autostart(): # Функция, которая при запуске программы проверяет, есть ли программа в автозапуске. Используется при подгрузке стартовых параметров
     
     def is_in_startup():
         shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')  # Определяем путь к ярлыку
