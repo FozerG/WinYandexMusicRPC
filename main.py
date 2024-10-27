@@ -28,7 +28,6 @@ import re
 import sys
 import os
 import winreg
-import shutil
 import threading
 import pythoncom
 from enum import Enum
@@ -39,7 +38,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.3"
+CURRENT_VERSION = "v2.4"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -514,24 +513,25 @@ def GetLastVersion(repoUrl):
 
 
 # Функция для переключения состояния strong_find
-def toggle_strong_find(icon, item):
+def toggle_strong_find():
     global strong_find
     strong_find = not strong_find
     log(f'Bool strong_find set state: {strong_find}')
 
 # Функция для переключения состояния auto_start_windows
-def toggle_auto_start_windows(icon, item):
+def toggle_auto_start_windows():
     global auto_start_windows
     auto_start_windows = not auto_start_windows
     log(f'Bool auto_start_windows set state: {auto_start_windows}')
     
-    def create_shortcut(target, shortcut_path, description=""):
+    def create_shortcut(target, shortcut_path, description="", arguments=""):
         pythoncom.CoInitialize()  # Инициализируем COM библиотеки
         shell = Dispatch('WScript.Shell')  # Создаем объект для работы с ярлыками
         shortcut = shell.CreateShortcut(shortcut_path)  # Создаем ярлык
         shortcut.TargetPath = target  # Устанавливаем путь к исполняемому файлу
         shortcut.WorkingDirectory = os.path.dirname(target)  # Устанавливаем рабочую директорию
         shortcut.Description = description  # Устанавливаем описание ярлыка
+        shortcut.Arguments = arguments
         shortcut.Save()  # Сохраняем ярлык
 
     def change_setting(tglle: bool): # Выношу в отдельную функцию, чтобы иметь возможность запустить в отдельном потоке,
@@ -539,9 +539,9 @@ def toggle_auto_start_windows(icon, item):
             try: # Автозапуск через добавление в папку автозапуска
                 exe_path = os.path.abspath(sys.argv[0])  # Получаем абсолютный путь к текущему исполняемому файлу
                 shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')  # Определяем путь для ярлыка в автозагрузке
-                create_shortcut(exe_path, shortcut_path)  # Создаем ярлык в автозагрузке
+                create_shortcut(exe_path, shortcut_path, arguments="--run-through-startup")  # Создаем ярлык в автозагрузке
             except: # Автозапуск через изменение в реестре
-                exe_path = os.path.abspath(sys.argv[0])  # Получаем абсолютный путь к текущему исполняемому файлу
+                exe_path = f'"{os.path.abspath(sys.argv[0])}" --run-through-startup'
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_SET_VALUE)  # Открываем ключ реестра для автозапуска программ
                 winreg.SetValueEx(key, 'YaMusicRPC', 0, winreg.REG_SZ, exe_path)  # Устанавливаем новый параметр в реестре с именем 'YaMusicRPC' и значением пути к исполняемому файлу
                 winreg.CloseKey(key)  # Закрываем ключ реестра
@@ -550,7 +550,6 @@ def toggle_auto_start_windows(icon, item):
             shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')
             if os.path.exists(shortcut_path):
                 os.remove(shortcut_path)
-
             # Удаляем запись из реестра
             try:
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run', 0, winreg.KEY_ALL_ACCESS)
@@ -561,8 +560,6 @@ def toggle_auto_start_windows(icon, item):
             
         
     threading.Thread(target=change_setting, args=[auto_start_windows]).start() # Запускаем в отдельном потоке для оптимизации
-
-
 
 def is_in_autostart(): # Функция, которая при запуске программы проверяет, есть ли программа в автозапуске. Используется при подгрузке стартовых параметров
     
@@ -585,7 +582,7 @@ def toggle_console():
     if win32gui.IsWindowVisible(window):
         win32gui.ShowWindow(window, win32con.SW_HIDE)
     else:
-        win32gui.ShowWindow(window, win32con.SW_SHOW)
+        Show_Console_Permanent()
 
 # Действия для кнопок
 def tray_click(icon, query):
@@ -677,7 +674,6 @@ def create_rpc_settings_menu():
         pystray.MenuItem('Activity Type', activity_type_menu),
         pystray.MenuItem('RPC Buttons', button_config_menu),
         pystray.MenuItem("RPC Language", language_config_menu),
-        pystray.MenuItem('Start RPC with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
     )
 
 # Функция для обновления имени аккаунта в меню
@@ -691,6 +687,7 @@ def update_account_name(icon, new_account_name):
     
     icon.menu = pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
+        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
         pystray.MenuItem("Yandex settings", settingsMenu),
         pystray.MenuItem("RPC settings", rpcSettingsMenu),
         pystray.MenuItem("GitHub", tray_click),
@@ -707,11 +704,11 @@ def create_tray_icon():
         pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
-        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows)
     )
     
     icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
+        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
         pystray.MenuItem("Yandex settings", settingsMenu),
         pystray.MenuItem("RPC settings", rpcSettingsMenu),
         pystray.MenuItem("GitHub", tray_click),
@@ -736,6 +733,7 @@ def Is_windows_11():
 def Check_conhost():
     if Is_windows_11():  # Windows 11 имеет консоль, которую нельзя свернуть в трей, поэтому мы используем conhost
         if '--run-through-conhost' not in sys.argv:  # Запущен ли скрипт уже через conhost
+            Run_by_startup_without_conhost()
             print("Wait a few seconds for the script to load...")
             script_path = os.path.abspath(sys.argv[0])
             first_pid = os.getpid()
@@ -754,6 +752,31 @@ def Check_conhost():
                 parent_process.wait(timeout=3)
             except Exception:
                 print(f"Couldnt close the process: {first_pid}")
+
+def Show_Console_Permanent():  
+    win32gui.ShowWindow(window, win32con.SW_RESTORE)
+    win32gui.SetForegroundWindow(window)
+
+def Check_run_by_startup():  
+    # Если приложение запущено через автозагрузку, скрываем окно консоли сразу.
+    # Если приложение запущено вручную, показываем окно консоли на 3 секунды и затем сворачиваем.
+    if window:
+        if '--run-through-startup' not in sys.argv:
+            Show_Console_Permanent()
+            log("Minimize to system tray in 3 seconds...")
+            time.sleep(3)
+        win32gui.ShowWindow(window, win32con.SW_HIDE)  
+    else:
+        log("Console window not found", LogType.Error)
+
+def Run_by_startup_without_conhost():  
+    # Функция для автозагрузки без лаунчера (Windows 11), скрывает окно консоли при запуске через автозагрузку.
+    window = win32console.GetConsoleWindow()
+    if window:
+        if '--run-through-startup' in sys.argv:
+            win32gui.ShowWindow(window, win32con.SW_HIDE)  
+    else:
+        log("Console window not found", LogType.Error)
 
 def Disable_close_button():
     hwnd = win32console.GetConsoleWindow()
@@ -842,7 +865,7 @@ def Get_IconPath():
         else:
             resources_path = os.path.dirname(os.path.abspath(__file__))
 
-        return f"{resources_path}/assets/tray.png"
+        return f"{resources_path}/assets/YMRPC_ico.ico"
     except Exception:
         return None
     
@@ -869,6 +892,7 @@ if __name__ == '__main__':
             
             if Is_already_running():
                 log("WinYandexMusicRPC is already running.", LogType.Error)
+                Show_Console_Permanent()
                 WaitAndExit()
             
             # Установка заголовка окна консоли
@@ -876,13 +900,7 @@ if __name__ == '__main__':
             
             # Отключение кнопки закрытия консоли
             Disable_close_button()
-            win32gui.ShowWindow(window, win32con.SW_SHOW)  # Показываем окно т.к оно свернуто с помощью "/min"
-            if window:
-                log("Minimize to system tray in 3 seconds...")
-                time.sleep(3)
-                win32gui.ShowWindow(window, win32con.SW_HIDE)  # Скрытие окна консоли
-            else:
-                log("Console window not found", LogType.Error)
+            Check_run_by_startup()
         else: # Запуск без exe (например в visual studio code)
             get_saves_settings(True) # Загрузка настроек
             log("Launched without minimizing to tray and other and other gui functions")
