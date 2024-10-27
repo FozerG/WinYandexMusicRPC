@@ -238,8 +238,10 @@ class Presence:
                             'start': start_time,
                             'end': end_time,
                             'large_image': ongoing_track['og-image'],
-                            'large_text': ongoing_track['album']
                         }
+
+                        if ongoing_track['album'] != ongoing_track['title']:
+                            presence_args['large_text'] = ongoing_track['album']
 
                         if button_config != ButtonConfig.NEITHER:
                             presence_args['buttons'] = build_buttons(ongoing_track['link'])
@@ -270,7 +272,6 @@ class Presence:
                                 'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Paused.png",
                                 'small_text': "On pause" if language_config == LanguageConfig.ENGLISH else "На паузе"
                             }
-
                             if button_config != ButtonConfig.NEITHER:
                                 presence_args['buttons'] = build_buttons(ongoing_track['link'])
 

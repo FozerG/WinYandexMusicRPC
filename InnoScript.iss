@@ -14,7 +14,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 ShowLanguageDialog=no
 SetupIconFile=assets\YMRPC_ico.ico
-WizardImageFile=assets\YMRPC_bmp.bmp
+WizardImageFile=assets\YMRPC_large_bmp.bmp
 WizardSmallImageFile=assets\YMRPC_bmp.bmp
 WizardImageAlphaFormat=defined
 PrivilegesRequired=lowest
@@ -41,14 +41,50 @@ Source: "dist\WinYandexMusicRPC-cli\WinYandexMusicRPC.exe"; DestDir: "{localappd
 Source: "dist\WinYandexMusicRPC-cli\_internal\*"; DestDir: "{localappdata}\WinYandexMusicRPC\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Добавляем ярлык для запуска приложения в меню "Пуск"
 Name: "{group}\WinYandexMusicRPC"; Filename: "{localappdata}\WinYandexMusicRPC\WinYandexMusicRPC.exe"
 Name: "{autodesktop}\WinYandexMusicRPC"; Filename: "{localappdata}\WinYandexMusicRPC\WinYandexMusicRPC.exe"; Tasks: desktopicon
 
+[Code]
+procedure DeleteStartupShortcut;
+var
+  StartupShortcut: string;
+begin
+  // Получаем путь к ярлыку в автозагрузке
+  StartupShortcut := ExpandConstant('{userappdata}\Microsoft\Windows\Start Menu\Programs\Startup\YaMusicRPC.lnk');
+  
+  // Проверяем, существует ли ярлык, и удаляем его, если он есть
+  if FileExists(StartupShortcut) then
+  begin
+    DeleteFile(StartupShortcut);
+  end;
+end;
+
+procedure DeleteRegistryEntry;
+var
+  RunKey: string;
+begin
+  // Определяем путь к ключу реестра
+  RunKey := 'Software\Microsoft\Windows\CurrentVersion\Run';
+
+  // Проверяем, существует ли запись реестра, и удаляем её, если она есть
+  if RegValueExists(HKEY_CURRENT_USER, RunKey, 'YaMusicRPC') then
+  begin
+    RegDeleteValue(HKEY_CURRENT_USER, RunKey, 'YaMusicRPC');
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  // Выполняем действия только после завершения удаления программы
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DeleteStartupShortcut;
+    DeleteRegistryEntry;
+  end;
+end;
 
 
 [Run]
-; Запуск exe файла после завершения установки
 Filename: "{localappdata}\WinYandexMusicRPC\WinYandexMusicRPC.exe"; Description: "{cm:RunDescription}"; Flags: nowait postinstall skipifsilent
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktop}"; GroupDescription: "{cm:AdditionalTasks}"
