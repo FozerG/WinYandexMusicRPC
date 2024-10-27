@@ -129,7 +129,7 @@ class Presence:
     running = False
     paused = False
     paused_time = 0 
-    exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe"]
+    exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe", "Vesktop.exe"]
 
     @staticmethod
     def is_discord_running() -> bool:
