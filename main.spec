@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets\\*', 'assets')],
+    datas=[('assets\\YMRPC_ico.ico', 'assets')],
         hiddenimports=[
         'winrt.windows.foundation.collections',
         'winrt.windows.foundation',
@@ -23,14 +23,13 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
-    name='main',
+    name='WinYandexMusicRPC',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    exclude_binaries=True,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,
@@ -39,5 +38,14 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\tray.png'],
+    icon=['assets\\YMRPC_ico.ico'],
+)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    name='WinYandexMusicRPC-cli',
+    strip=False,
+    upx=True
 )

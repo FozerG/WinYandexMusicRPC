@@ -1,4 +1,4 @@
-# **<img src="./assets/tray.png" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
+# **<img src="./assets/YMRPC_ico.ico" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
 [![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
 
 >Несмотря на неразумное решение о блокировке Discord в РФ, я продолжу поддерживать скрипт в рабочем состоянии, насколько это будет возможно 🕊️
@@ -26,25 +26,23 @@
 Работа проверена только на Windows 11 и Windows 10, на других версиях и платформах работать не будет. **С урезанными Lite и Custom версиями Windows работа не гарантируется.**
 
 Если вы не будете использовать ехе файл то:
-1. Python 3.10+
+1. Python <3.14, >=3.10
 
 ## Как скачать и использовать Exe?
 1. Скачиваем [последний доступный релиз](https://github.com/FozerG/WinYandexMusicRPC/releases)
   
-2. Открываем WinYandexMusicRPC.exe
+2. Открываем WinYandexMusicRPC
 
 3. Скрипт через 3 секунды автоматически скроется в системный трей. Откройте консоль через трей чтобы убедиться в работе.
 
-
 ## Как использовать main.py?
 
-1. Открываем терминал и идем в папку где находится файл `requirements.txt`. Пишем `pip install -r requirements.txt`, для того что бы установить зависимости.
-
-2. В терминал пишем `python main.py`
+1. Открываем терминал и идем в папку где находится файл `requirements.txt`.
+2. Пишем `pip install -r requirements.txt` для того что бы установить зависимости.
+3. В терминал пишем `python main.py`
 
 >Чтобы скомпилировать скрипт с помощью [Pyinstaller](https://pypi.org/project/pyinstaller/), выполните данную команду:  
-`pyinstaller main.spec`
-
+`pyinstaller --noconfirm main.spec`
 
 ------------
 В случае если вы слушаете музыку не только из яндекс музыки то рекомендую заменить строку `strong_find = True` на `strong_find = False`, или воспользуйтесь системным треем. Тогда будет показыватся лучший результат по поиску, но не всегда точный.

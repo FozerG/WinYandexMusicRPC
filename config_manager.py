@@ -1,10 +1,9 @@
 import configparser
 import os
-import tempfile
 
 class ConfigManager:
     def __init__(self, config_file='settings.ini', temp_dir_name="WinYandexMusicRPC"):
-        self.temp_dir = os.path.join(tempfile.gettempdir(), temp_dir_name)
+        self.temp_dir = os.path.join(os.getenv('LOCALAPPDATA'), temp_dir_name)
         if not os.path.exists(self.temp_dir):
             os.makedirs(self.temp_dir)
         
