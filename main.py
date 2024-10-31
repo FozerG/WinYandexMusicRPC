@@ -323,10 +323,6 @@ class Presence:
             position = current_media_info['position']  # Получаем позицию из информации о медиа
             playback_status = current_media_info.get('playback_status', 'unknown')  # Получаем статус воспроизведения
             
-            # Обработка подкастов и аудиокниг
-            if current_media_info.get("type") in ["audiobook", "podcast"] and not artist:
-                artist = "Unknown Author"  # Устанавливаем значение по умолчанию для подкастов и аудиокниг
-
             if not title:  # Проверяем наличие названия
                 log("Winsdk returned empty string for title", LogType.Error)
                 return {'success': False}
@@ -372,7 +368,7 @@ class Presence:
             return {
                 'success': True,
                 'title': TrimString(episode['title'], 40),
-                'artist': "Подкаст или книга",  # Устанавливаем "Unknown Author" для подкастов
+                'artist': "Подкаст или книга",  # Устанавливаем "Подкаст или книга" для подкастов
                 'album': TrimString(episode['albums'][0]['title'], 25) if episode.__getattribute__("title") else "Подкаст или книга",
                 'label': TrimString(episode['title'], 50),
                 'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
@@ -424,9 +420,9 @@ class Presence:
         return {
             'success': True,
             'title': Single_char(TrimString(track.title, 40)),
-            'artist': Single_char(TrimString(", ".join(track.artists_name()), 40)) if track.artists_name() else "Unknown Author",  # Устанавливаем "Unknown Author", если исполнителей нет
+            'artist': Single_char(TrimString(", ".join(track.artists_name()), 40)) if track.artists_name() else "Неизвестный автор",  # Устанавливаем "Unknown Author", если исполнителей нет
             'album': Single_char(TrimString(track.albums[0].title, 25)),
-            'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}", 50) if track.artists_name() else f"Подкаст или книга - {track.title}",  # Устанавливаем другой текст для подкастов и аудиокниг
+            'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}", 50) if track.artists_name() else f"{track.title}",
             'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
             'durationSec': track.duration_ms // 1000,
             'formatted_duration': format_duration(track.duration_ms),
