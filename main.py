@@ -122,6 +122,8 @@ async def get_media_info():
 
     raise Exception('The music is not playing right now.')
 
+from itertools import permutations
+
 class Presence:
     client = None
     currentTrack = None
@@ -134,38 +136,35 @@ class Presence:
     @staticmethod
     def is_discord_running() -> bool:
         return any(name in (p.name() for p in psutil.process_iter()) for name in Presence.exe_names)
-        
+
     @staticmethod
     def connect_rpc():
         try:
-            client_id = CLIENT_ID_EN if language_config == LanguageConfig.ENGLISH else \
-                CLIENT_ID_RU_DECLINED if activityType_config == ActivityTypeConfig.LISTENING else CLIENT_ID_RU
+            client_id = (
+                CLIENT_ID_EN if language_config == LanguageConfig.ENGLISH
+                else CLIENT_ID_RU_DECLINED if activityType_config == ActivityTypeConfig.LISTENING
+                else CLIENT_ID_RU
+            )
             rpc = pypresence.Presence(client_id)
             rpc.connect()
             return rpc
-        except pypresence.exceptions.DiscordNotFound:
-            log("Pypresence - Discord not found.", LogType.Error)
-            return None
-        except pypresence.exceptions.InvalidID:
-            log("Pypresence - Incorrect CLIENT_ID", LogType.Error)
+        except (pypresence.exceptions.DiscordNotFound, pypresence.exceptions.InvalidID) as e:
+            log(f"Pypresence - {str(e)}", LogType.Error)
             return None
         except Exception as e:
             log(f"Discord is not ready for a reason: {e}", LogType.Error)
             return None
-        
+
     @staticmethod
-    def discord_available() -> bool:
-        while True:
-            if Presence.is_discord_running():
-                Presence.rpc = Presence.connect_rpc() 
-                if Presence.rpc:
-                    log("Discord is ready for Rich Presence")
-                    break
-                else:
-                    log("Discord is launched but not ready for Rich Presence. Try again...", LogType.Error)
-            else:
-                log("Discord is not launched", LogType.Error)
+    def wait_for_discord():
+        while not Presence.is_discord_running():
+            log("Discord is not launched", LogType.Error)
             time.sleep(3)
+        Presence.rpc = Presence.connect_rpc()
+        if Presence.rpc:
+            log("Discord is ready for Rich Presence")
+        else:
+            log("Discord is launched but not ready for Rich Presence. Try again...", LogType.Error)
 
     @staticmethod
     def stop() -> None:
@@ -189,7 +188,7 @@ class Presence:
             Presence.rpc.close()
             Presence.rpc = None
         time.sleep(3)
-        Presence.discord_available()
+        Presence.wait_for_discord()
 
     @staticmethod
     def discord_was_closed() -> None:
@@ -197,111 +196,120 @@ class Presence:
         Presence.currentTrack = None
         global name_prev
         name_prev = None
-        Presence.discord_available()    
-            
-    # Метод для запуска Rich Presence.
+        Presence.wait_for_discord()
+
     @staticmethod
     def start() -> None:
-        global ya_token
         global needRestart
-        Presence.discord_available()
-        if Presence.client:
+        Presence.wait_for_discord()
+        if Presence.client is None:
             log("Initialize client with token...", LogType.Default)
-        else:
             Presence.client = Client().init()
+
         Presence.running = True
         Presence.currentTrack = None
+
         while Presence.running:
             currentTime = time.time()
             if not Presence.is_discord_running():
-                Presence.discord_was_closed() 
+                Presence.discord_was_closed()
             if needRestart:
                 needRestart = False
                 Presence.restart()
+
             try:
                 ongoing_track = Presence.getTrack()
-                if Presence.currentTrack != ongoing_track: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
-                    if ongoing_track['success']: 
-                        if Presence.currentTrack is not None and 'label' in Presence.currentTrack and Presence.currentTrack['label'] is not None:
-                            if ongoing_track['label'] != Presence.currentTrack['label']: 
-                                log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
-                        else:
-                            log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
-                        Presence.paused_time = 0
-                        trackTime = currentTime
-                        start_time = currentTime - int(ongoing_track['start-time'].total_seconds())
-                        end_time = start_time + ongoing_track['durationSec']
-                        presence_args = {
-                            'activity_type': activityType_config.value,
-                            'details': ongoing_track['title'],
-                            'state': ongoing_track['artist'],
-                            'start': start_time,
-                            'end': end_time,
-                            'large_image': ongoing_track['og-image'],
-                        }
+                Presence.update_presence(ongoing_track, currentTime)
 
-                        if ongoing_track['album'] != ongoing_track['title']:
-                            presence_args['large_text'] = ongoing_track['album']
-
-                        if button_config != ButtonConfig.NEITHER:
-                            presence_args['buttons'] = build_buttons(ongoing_track['link'])
-                            
-                        if activityType_config == ActivityTypeConfig.LISTENING:
-                            presence_args['small_image'] = "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Playing.png"
-                            presence_args['small_text'] = "Playing" if language_config == LanguageConfig.ENGLISH else "Проигрывается"
-
-
-                        Presence.rpc.update(**presence_args)
-                    else:
-                        Presence.rpc.clear()
-                        log(f"Clear RPC")
-
-                    Presence.currentTrack = ongoing_track
-
-                else: #Песня не новая, проверяем статус паузы
-                    if ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and not Presence.paused:
-                        Presence.paused = True
-                        log(f"Track {ongoing_track['label']} on pause", LogType.Update_Status)
-                        if ongoing_track['success']:
-                            presence_args = {
-                                'activity_type': activityType_config.value,
-                                'details': ongoing_track['title'],
-                                'state': ongoing_track['artist'],
-                                'large_image': ongoing_track['og-image'],
-                                'large_text': ongoing_track['album'],
-                                'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Paused.png",
-                                'small_text': "On pause" if language_config == LanguageConfig.ENGLISH else "На паузе"
-                            }
-                            if button_config != ButtonConfig.NEITHER:
-                                presence_args['buttons'] = build_buttons(ongoing_track['link'])
-
-                            if activityType_config == ActivityTypeConfig.LISTENING and int(ongoing_track['start-time'].total_seconds()) != 0:
-                                presence_args['large_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
-                            if int(ongoing_track['start-time'].total_seconds()) != 0:
-                                presence_args['small_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} {format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
-
-                            Presence.rpc.update(**presence_args)
-
-                    elif ongoing_track['success'] and ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
-                        log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
-                        Presence.paused = False
-
-                    elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused and trackTime != 0:
-                        Presence.paused_time = currentTime - trackTime
-                        if Presence.paused_time > 5 * 60:  # если пауза больше 5 минут
-                            trackTime = 0
-                            Presence.rpc.clear()
-                            log(f"Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
-                    else:
-                        Presence.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
-
-                time.sleep(3)
             except pypresence.exceptions.PipeClosed:
-                Presence.discord_was_closed()        
+                Presence.discord_was_closed()
             except Exception as e:
                 log(f"Presence class stopped for a reason: {e}", LogType.Error)
 
-    # Метод для получения информации о текущем треке.
+            time.sleep(3)
+
+    @staticmethod
+    def update_presence(ongoing_track, currentTime):
+        if Presence.currentTrack != ongoing_track:  # новая песня
+            if ongoing_track['success']:
+                Presence.handle_new_track(ongoing_track, currentTime)
+            else:
+                Presence.rpc.clear()
+                log("Clear RPC")
+            Presence.currentTrack = ongoing_track
+        else:  # песня не новая, проверяем статус паузы
+            Presence.handle_pause_status(ongoing_track, currentTime)
+
+    @staticmethod
+    def handle_new_track(ongoing_track, currentTime):
+        log_change = lambda label: log(f"Changed track to {label}", LogType.Update_Status)
+        if Presence.currentTrack and 'label' in Presence.currentTrack and Presence.currentTrack['label']:
+            if ongoing_track['label'] != Presence.currentTrack['label']:
+                log_change(ongoing_track['label'])
+        else:
+            log_change(ongoing_track['label'])
+
+        Presence.paused_time = 0
+        start_time = currentTime - int(ongoing_track['start-time'].total_seconds())
+        end_time = start_time + ongoing_track['durationSec']
+        presence_args = {
+            'activity_type': activityType_config.value,
+            'details': ongoing_track['title'],
+            'state': ongoing_track['artist'],
+            'start': start_time,
+            'end': end_time,
+            'large_image': ongoing_track['og-image'],
+            'large_text': ongoing_track['album'],
+            'buttons': build_buttons(ongoing_track['link']) if button_config != ButtonConfig.NEITHER else None,
+        }
+
+        if activityType_config == ActivityTypeConfig.LISTENING:
+            presence_args.update({
+                'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Playing.png",
+                'small_text': "Playing" if language_config == LanguageConfig.ENGLISH else "Проигрывается"
+            })
+
+        Presence.rpc.update(**presence_args)
+
+    @staticmethod
+    def handle_pause_status(ongoing_track, currentTime):
+        if ongoing_track['success']:
+            if ongoing_track["playback"] != PlaybackStatus.Playing.name and not Presence.paused:
+                Presence.paused = True
+                log(f"Track {ongoing_track['label']} on pause", LogType.Update_Status)
+                Presence.update_paused_presence(ongoing_track)
+            elif ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
+                log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
+                Presence.paused = False
+            elif ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused:
+                Presence.paused_time = currentTime - Presence.paused_time
+                if Presence.paused_time > 5 * 60:
+                    Presence.rpc.clear()
+                    log("Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
+        else:
+            Presence.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
+
+    @staticmethod
+    def update_paused_presence(ongoing_track):
+        presence_args = {
+            'activity_type': activityType_config.value,
+            'details': ongoing_track['title'],
+            'state': ongoing_track['artist'],
+            'large_image': ongoing_track['og-image'],
+            'large_text': ongoing_track['album'],
+            'small_image': "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Paused.png",
+            'small_text': "On pause" if language_config == LanguageConfig.ENGLISH else "На паузе",
+            'buttons': build_buttons(ongoing_track['link']) if button_config != ButtonConfig.NEITHER else None,
+        }
+
+        if activityType_config == ActivityTypeConfig.LISTENING and int(ongoing_track['start-time'].total_seconds()) != 0:
+            presence_args['large_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} " \
+                                           f"{format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
+            presence_args['small_text'] = f"{'On pause' if language_config == LanguageConfig.ENGLISH else 'На паузе'} " \
+                                           f"{format_duration(int(ongoing_track['start-time'].total_seconds() * 1000))} / {ongoing_track['formatted_duration']}"
+
+        Presence.rpc.update(**presence_args)
+
     @staticmethod
     def getTrack() -> dict:
         try:
@@ -309,82 +317,125 @@ class Presence:
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
+
             artist = current_media_info.get("artist", "").strip()
             title = current_media_info.get("title", "").strip()
-            position = current_media_info['position']
-            if not artist or not title:
-                log("Winsdk returned empty string for artist or title", LogType.Error)
+            position = current_media_info['position']  # Получаем позицию из информации о медиа
+            playback_status = current_media_info.get('playback_status', 'unknown')  # Получаем статус воспроизведения
+            
+            # Обработка подкастов и аудиокниг
+            if current_media_info.get("type") in ["audiobook", "podcast"] and not artist:
+                artist = "Unknown Author"  # Устанавливаем значение по умолчанию для подкастов и аудиокниг
+
+            if not title:  # Проверяем наличие названия
+                log("Winsdk returned empty string for title", LogType.Error)
                 return {'success': False}
-            name_current = artist + " - " + title
+
+            # Создаем имя для поиска
+            name_current = f"{artist} - {title}" if artist else title  # Убираем префикс, если нет исполнителей
+
             global name_prev
-            global strong_find
-            if str(name_current) != name_prev:
+            if name_current != name_prev:
                 log("Now listening to " + name_current)
-            else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
-                currentTrack_copy = Presence.currentTrack.copy()
-                currentTrack_copy["start-time"] = position
-                currentTrack_copy["playback"] = current_media_info['playback_status']
-                return currentTrack_copy
+            else:
+                return Presence.get_current_playback_status(position, playback_status)
 
-            name_prev = str(name_current)
-            search = Presence.client.search(name_current.replace("'", " "), True, "all", 0, False)
+            name_prev = name_current
+            
+            # Попытка поиска трека
+            found_track = Presence.search_track(name_current.replace("'", " "), position, playback_status)
+            if not found_track['success']:
+                # Если не нашли, пробуем искать только по заголовку
+                log(f"Trying to find by title only: {title}")
+                found_track = Presence.search_track(title.replace("'", " "), position, playback_status)
 
-            if search.tracks is None:
-                log(f"Can't find the song: {name_current}")
-                return {'success': False}
+            
+            return found_track
 
-            finalTrack = None
-            debugStr = []
-            for index, trackFromSearch in enumerate(search.tracks.results[:5], start=1): #Из поиска проверяем первые 5 результатов
-                if trackFromSearch.type not in ['music', 'track', 'podcast_episode']:
-                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong type.")
-
-                # Авторы могут отличатся положением, поэтому делаем все возможные варианты их порядка.
-                artists = trackFromSearch.artists_name()
-                if len(artists) <= 4:
-                    all_variants = [list(variant) for variant in permutations(artists)]
-                    findTrackNames = []
-                    for variant in all_variants:
-                        findTrackNames.append(', '.join([str(elem) for elem in variant]) + " - " + trackFromSearch.title)
-                else:
-                    findTrackNames = []
-                    findTrackNames.append(', '.join(artists) + " - " + trackFromSearch.title)
-
-                # Также может отличаться регистр, так что приведём всё в один регистр.    
-                boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
-
-                if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
-                    findTrackName = ', '.join([str(elem) for elem in trackFromSearch.artists_name()]) + " - " + trackFromSearch.title
-                    debugStr.append(f"[WinYandexMusicRPC] -> The result #{index} has the wrong title. Now play: {name_current}. But we find: {findTrackName}")
-                    continue
-                else: #иначе трек найден
-                    finalTrack = trackFromSearch
-                    break
-
-            if finalTrack is None:
-                print('\n'.join(debugStr))
-                log(f"Can't find the song (strong_find): {name_current}")
-                return {'success': False}
-
-            track = finalTrack
-            trackId = track.trackId.split(":")
-            if track:
-                return {
-                    'success': True,
-                    'title': Single_char(TrimString(track.title, 40)),
-                    'artist': Single_char(TrimString(f"{', '.join(track.artists_name())}",40)),
-                    'album':    Single_char(TrimString(track.albums[0].title,25)),
-                    'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}",50),
-                    'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
-                    'durationSec': track.duration_ms // 1000,
-                    'formatted_duration': format_duration(track.duration_ms),
-                    'start-time': position,
-                    'playback': current_media_info['playback_status'],
-                    'og-image': "https://" + track.og_image[:-2] + "400x400"
-                }
         except Exception as exception:
             Handle_exception(exception)  
             return {'success': False}
+
+
+    @staticmethod
+    def get_current_playback_status(position, playback_status):
+        currentTrack_copy = Presence.currentTrack.copy()
+        currentTrack_copy["start-time"] = position
+        currentTrack_copy["playback"] = playback_status  # Используем статус воспроизведения из current_media_info
+        return currentTrack_copy
+
+
+    @staticmethod
+    def create_podcast_info(episode, position, playback_status) -> dict:
+        try:
+            trackId = episode.trackId.split(":")
+            return {
+                'success': True,
+                'title': TrimString(episode['title'], 40),
+                'artist': "Подкаст или книга",  # Устанавливаем "Unknown Author" для подкастов
+                'album': TrimString(episode['albums'][0]['title'], 25) if episode.__getattribute__("title") else "Подкаст или книга",
+                'label': TrimString(episode['title'], 50),
+                'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
+                'durationSec': episode['duration_ms'] // 1000 if episode.__getattribute__('duration_ms') else 0,
+                'formatted_duration': format_duration(episode['duration_ms']) if episode.__getattribute__('duration_ms') else "00:00",
+                'start-time': position,  # Можно передать актуальное значение, если оно доступно
+                'playback': playback_status,  # Можно передать актуальный статус воспроизведения, если он доступен
+                'og-image': "https://" + episode.og_image[:-2] + "400x400"
+            }
+        except Exception as e:
+            log(f"Error creating podcast info: {e}", LogType.Error)
+            return {'success': False}
+        
+    @staticmethod
+    def search_track(name_current: str, position, playback_status) -> dict:
+        # Изначально ищем треки
+        search = Presence.client.search(name_current, True, "track", 0, False)
+
+        if search.tracks is None:
+            log(f"Can't find the song: {name_current} (tracks)")
+        else:
+            for trackFromSearch in search.tracks.results:
+                if trackFromSearch.type in ['music', 'track']:
+                    return Presence.create_track_info(trackFromSearch, position, playback_status)
+
+        # Если не нашли трек, ищем подкасты и эпизоды
+        search = Presence.client.search(name_current, True, "podcast_episode", 0, False)
+
+        if search.podcast_episodes is None or not search.podcast_episodes['results']:
+            log(f"Can't find the podcast or audiobook: {name_current} (podcast_episode)")
+            return {'success': False}
+
+        # Обработка найденных подкастов и эпизодов
+        for episodeFromSearch in search.podcast_episodes['results']:
+            return Presence.create_podcast_info(episodeFromSearch, position, playback_status)  # Используем новую функцию для создания информации о подкасте
+
+        log(f"Can't find the podcast or audiobook: {name_current} (podcast_episode)")
+        return {'success': False}
+
+    @staticmethod
+    def create_track_names(artists, title):
+        if len(artists) <= 4:
+            return [', '.join(variant) + " - " + title for variant in permutations(artists)]
+        return [', '.join(artists) + " - " + title]
+
+    @staticmethod
+    def create_track_info(track, position, playback_status) -> dict:
+        trackId = track.trackId.split(":")
+        return {
+            'success': True,
+            'title': Single_char(TrimString(track.title, 40)),
+            'artist': Single_char(TrimString(", ".join(track.artists_name()), 40)) if track.artists_name() else "Unknown Author",  # Устанавливаем "Unknown Author", если исполнителей нет
+            'album': Single_char(TrimString(track.albums[0].title, 25)),
+            'label': TrimString(f"{', '.join(track.artists_name())} - {track.title}", 50) if track.artists_name() else f"Подкаст или книга - {track.title}",  # Устанавливаем другой текст для подкастов и аудиокниг
+            'link': f"https://music.yandex.ru/album/{trackId[1]}/track/{trackId[0]}/",
+            'durationSec': track.duration_ms // 1000,
+            'formatted_duration': format_duration(track.duration_ms),
+            'start-time': position,  # Используем переданную позицию
+            'playback': playback_status,  # Используем статус воспроизведения из current_media_info
+            'og-image': "https://" + track.og_image[:-2] + "400x400"
+        }
+
+
 
 def format_duration(duration_ms):
     total_seconds = duration_ms // 1000
