@@ -70,6 +70,9 @@ needRestart = False
 #Менеджер настроек
 config_manager = ConfigManager()
 
+# Время переключения песни или постановки на паузу
+trackTime = None
+
 # Enum для конфигурации кнопок
 class ButtonConfig(Enum):
     YANDEX_MUSIC_WEB = 1
@@ -211,6 +214,7 @@ class Presence:
 
         while Presence.running:
             currentTime = time.time()
+            
             if not Presence.is_discord_running():
                 Presence.discord_was_closed()
             if needRestart:
@@ -230,7 +234,9 @@ class Presence:
 
     @staticmethod
     def update_presence(ongoing_track, currentTime):
+        global trackTime
         if Presence.currentTrack != ongoing_track:  # новая песня
+            trackTime = currentTime
             if ongoing_track['success']:
                 Presence.handle_new_track(ongoing_track, currentTime)
             else:
@@ -273,6 +279,7 @@ class Presence:
 
     @staticmethod
     def handle_pause_status(ongoing_track, currentTime):
+        global trackTime
         if ongoing_track['success']:
             if ongoing_track["playback"] != PlaybackStatus.Playing.name and not Presence.paused:
                 Presence.paused = True
@@ -281,9 +288,10 @@ class Presence:
             elif ongoing_track["playback"] == PlaybackStatus.Playing.name and Presence.paused:
                 log(f"Track {ongoing_track['label']} off pause.", LogType.Update_Status)
                 Presence.paused = False
-            elif ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused:
-                Presence.paused_time = currentTime - Presence.paused_time
+            elif ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused and trackTime != 0:
+                Presence.paused_time = currentTime - trackTime
                 if Presence.paused_time > 5 * 60:
+                    trackTime = 0
                     Presence.rpc.clear()
                     log("Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
         else:
