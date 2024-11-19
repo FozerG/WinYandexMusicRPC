@@ -38,7 +38,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.4"
+CURRENT_VERSION = "v2.4.1"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -113,11 +113,15 @@ async def get_media_info():
         position = current_session.get_timeline_properties().position
         playback_info = current_session.get_playback_info()
         playback_status = PlaybackStatus(playback_info.playback_status).name
+        session_title = info.title or "Unknown Title"
+        app_name = current_session.source_app_user_model_id or "Unknown App"
         return {
             'artist': artist,
             'title': title,
             'playback_status': playback_status,
-            'position': position
+            'position': position,
+            'session_title': session_title,
+            'app_name': app_name
         }
 
     raise Exception('The music is not playing right now.')
@@ -313,7 +317,7 @@ class Presence:
             title = current_media_info.get("title", "").strip()
             position = current_media_info['position']
             if not artist or not title:
-                log("Winsdk returned empty string for artist or title", LogType.Error)
+                log(f"MediaManager returned empty string for artist or title. Active app - {current_media_info['app_name']}. Title - {current_media_info['session_title']}", LogType.Error)
                 return {'success': False}
             name_current = artist + " - " + title
             global name_prev
