@@ -22,6 +22,7 @@ import keyring
 import requests
 import asyncio
 import psutil
+import string
 import json
 import time
 import re
@@ -461,6 +462,14 @@ def WaitAndExit():
         win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
     else:
         sys.exit(0)
+
+def contains_non_latin_chars(s):
+    """
+    Проверяет, содержит ли строка символы, отличные от английских букв,
+    цифр и стандартных знаков пунктуации.
+    """
+    allowed_chars = string.ascii_letters + string.digits + string.punctuation + " "
+    return any(char not in allowed_chars for char in s)
 
 def TrimString(string, maxChars):
     if len(string) > maxChars:
@@ -912,6 +921,10 @@ if __name__ == '__main__':
 
         # Проверка наличия токена в памяти
         Init_yaToken(False)
+
+        if contains_non_latin_chars(os.path.abspath(sys.argv[0])):
+            log("Unsupported symbols were found in the program path. Please move the script to the correct path. Current path:" + os.path.abspath(sys.argv[0]), LogType.Error)
+
         # Запуск Presence   
         Presence.start()
         
