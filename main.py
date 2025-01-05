@@ -627,7 +627,7 @@ def get_account_name():
         return f"None"
 
 # Функция для загрузки сохраненных настроек. Если настройки отсутствуют, используются значения по умолчанию из fallback.
-def get_saves_settings(fromStart=False):
+def get_saves_settings(fromStart = False):
     global activityType_config
     global button_config
     global language_config
