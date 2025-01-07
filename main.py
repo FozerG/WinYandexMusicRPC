@@ -530,6 +530,7 @@ def GetLastVersion(repoUrl):
 def toggle_strong_find():
     global strong_find
     strong_find = not strong_find
+    config_manager.set_setting('UserSettings', 'strong_find', str(strong_find))  # Сохраняем новое значение
     log(f'Bool strong_find set state: {strong_find}')
 
 # Функция для переключения состояния auto_start_windows
@@ -631,13 +632,20 @@ def get_saves_settings(fromStart = False):
     global button_config
     global language_config
     global auto_start_windows
-    
+    global strong_find
+
     auto_start_windows = is_in_autostart()
     activityType_config = config_manager.get_enum_setting('UserSettings', 'activity_type', ActivityTypeConfig, fallback=ActivityTypeConfig.LISTENING)
     button_config = config_manager.get_enum_setting('UserSettings', 'buttons_settings', ButtonConfig, fallback=ButtonConfig.BOTH)
     language_config = config_manager.get_enum_setting('UserSettings', 'language', LanguageConfig, fallback=LanguageConfig.RUSSIAN)
+
+    # Загрузка значения strong_find из конфигурации
+    strong_find_str = config_manager.get_setting('UserSettings', 'strong_find', fallback='True')  # По умолчанию 'True'
+    strong_find = strong_find_str.lower() == 'true'  # Преобразуем строку в булевое значение
+
     if fromStart:
-        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}", LogType.Update_Status)
+        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}", LogType.Update_Status)
+
     
 # Функция для создания меню на основе переданных параметров
 def create_enum_menu(enum_class, get_setting_func, set_setting_func):
