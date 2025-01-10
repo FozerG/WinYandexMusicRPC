@@ -776,8 +776,11 @@ def Check_conhost():
                 print(f"Couldnt close the process: {first_pid}")
 
 def Show_Console_Permanent():  
-    win32gui.ShowWindow(window, win32con.SW_RESTORE)
-    win32gui.SetForegroundWindow(window)
+    try:
+        win32gui.ShowWindow(window, win32con.SW_RESTORE)
+        win32gui.SetForegroundWindow(window)
+    except Exception as e:
+        log(f"We cant show the window {e}",LogType.Error)
 
 def Check_run_by_startup():  
     # Если приложение запущено через автозагрузку, скрываем окно консоли сразу.
