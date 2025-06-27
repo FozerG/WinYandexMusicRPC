@@ -66,7 +66,10 @@ icoPath = str()
 result_queue = multiprocessing.Queue()
 
 # Переменная для проверки необходимости запуска рестарта в главном потоке Presence
-needRestart = False
+needRestart  = False
+
+# Переменная для печати сообщения при первом вызове метода getTrack()
+isFirstTrackCall = True
 
 #Менеджер настроек
 config_manager = ConfigManager()
@@ -309,8 +312,16 @@ class Presence:
     # Метод для получения информации о текущем треке.
     @staticmethod
     def getTrack() -> dict:
+        global name_prev, strong_find, isFirstTrackCall
         try:
-            current_media_info = asyncio.run(get_media_info())
+            if isFirstTrackCall:
+                log("Making the first request to windows MediaManager...", LogType.Default)
+                isFirstTrackCall = False
+
+            async def _get_media_info_with_timeout():
+                return await asyncio.wait_for(get_media_info(), timeout=10)
+            current_media_info = asyncio.run(_get_media_info_with_timeout())
+
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
                 return {'success': False}
@@ -321,8 +332,6 @@ class Presence:
                 log(f"MediaManager returned empty string for artist or title. Active app - {current_media_info['app_name']}. Title - {current_media_info['session_title']}", LogType.Error)
                 return {'success': False}
             name_current = artist + " - " + title
-            global name_prev
-            global strong_find
             if str(name_current) != name_prev:
                 log("Now listening to " + name_current)
             else: #Если песня уже играет, то не нужно ее искать повторно. Просто вернем её с актуальным статусом паузы и позиции.
@@ -332,8 +341,12 @@ class Presence:
                 return currentTrack_copy
 
             name_prev = str(name_current)
+            # Первая попытка — без апострофа
             search = Presence.client.search(name_current.replace("'", " "), True, "all", 0, False)
 
+            # Если не нашли — вторая попытка с оригинальным именем
+            if search.tracks is None:
+                search = Presence.client.search(name_current, True, "all", 0, False)
             if search.tracks is None:
                 log(f"Can't find the song: {name_current}")
                 return {'success': False}
@@ -387,6 +400,8 @@ class Presence:
                     'playback': current_media_info['playback_status'],
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
+        except asyncio.TimeoutError:
+            log("Timeout: get_media_info() took more than 10 seconds", LogType.Error)
         except Exception as exception:
             Handle_exception(exception)
             return {'success': False}
