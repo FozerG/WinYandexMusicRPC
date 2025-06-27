@@ -6,7 +6,7 @@ class ConfigManager:
         self.temp_dir = os.path.join(os.getenv('LOCALAPPDATA'), temp_dir_name)
         if not os.path.exists(self.temp_dir):
             os.makedirs(self.temp_dir)
-        
+
         self.config_file = os.path.join(self.temp_dir, config_file)
         self.config = configparser.ConfigParser()
         self._load_config()
@@ -46,3 +46,9 @@ class ConfigManager:
         else:
             self.set_enum_setting(section, option, fallback)
             return fallback
+
+    def get_selected_session(self):
+        return self.get_setting("UserSettings", "selected_session", fallback="Automatic")
+
+    def set_selected_session(self, session_id):
+        self.set_setting("UserSettings", "selected_session", session_id)

@@ -39,7 +39,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.4.1"
+CURRENT_VERSION = "v2.5"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -70,6 +70,9 @@ needRestart  = False
 
 # Переменная для печати сообщения при первом вызове метода getTrack()
 isFirstTrackCall = True
+
+# Переменная для хранения иконки в трее
+iconTray = True
 
 #Менеджер настроек
 config_manager = ConfigManager()
@@ -109,16 +112,30 @@ class PlaybackStatus(Enum):
 async def get_media_info():
     sessions = await MediaManager.request_async()
     current_session = sessions.get_current_session()
+    all_sessions = sessions.get_sessions()
+    selected_session_id = config_manager.get_selected_session()
+    target_session = None
+    if selected_session_id and selected_session_id != "Automatic":
+        # Пробуем найти сессию по source_app_user_model_id
+        for session in all_sessions:
+            if session.source_app_user_model_id == selected_session_id:
+                target_session = session
+                break
 
-    if current_session:
-        info = await current_session.try_get_media_properties_async()
+        if not target_session:
+            raise Exception(f"Selected session '{selected_session_id}' not found.")
+    else:
+        target_session = sessions.get_current_session()
+
+    if target_session:
+        info = await target_session.try_get_media_properties_async()
         artist = info.artist
         title = info.title
-        position = current_session.get_timeline_properties().position
-        playback_info = current_session.get_playback_info()
+        position = target_session.get_timeline_properties().position
+        playback_info = target_session.get_playback_info()
         playback_status = PlaybackStatus(playback_info.playback_status).name
         session_title = info.title or "Unknown Title"
-        app_name = current_session.source_app_user_model_id or "Unknown App"
+        app_name = target_session.source_app_user_model_id or "Unknown App"
         return {
             'artist': artist,
             'title': title,
@@ -129,6 +146,13 @@ async def get_media_info():
         }
 
     raise Exception('The music is not playing right now.')
+
+async def get_session_ids():
+    sessions = await MediaManager.request_async()
+    return [
+        session.source_app_user_model_id or "UnknownApp"
+        for session in sessions.get_sessions()
+    ]
 
 class Presence:
     client = None
@@ -651,7 +675,84 @@ def get_saves_settings(fromStart = False):
     strong_find = strong_find_str.lower() == 'true'  # Преобразуем строку в булевое значение
 
     if fromStart:
-        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}", LogType.Update_Status)
+        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}, selected_session = {config_manager.get_selected_session()}", LogType.Update_Status)
+
+def create_session_toggle_menu(icon):
+    try:
+        session_ids = asyncio.run(get_session_ids())
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+        session_ids = loop.run_until_complete(get_session_ids())
+
+    menu_items = []
+
+    # Кнопка обновления
+    menu_items.append(
+        pystray.MenuItem(
+            'Update List',
+            lambda item: update_tray()
+        )
+    )
+
+    menu_items.append(pystray.Menu.SEPARATOR)
+
+    selected_session = config_manager.get_selected_session()
+    session_ids_set = set(session_ids)
+
+    def set_automatic(item):
+        log("Selected session: Automatic", LogType.Default)
+        config_manager.set_selected_session("Automatic")
+
+    def is_automatic(item):
+        return config_manager.get_selected_session() == "Automatic"
+
+    menu_items.append(
+        pystray.MenuItem(
+            "Automatic",
+            set_automatic,
+            checked=is_automatic,
+            radio=True
+        )
+    )
+
+    # Добавляем активные сессии
+    for session_id in session_ids:
+        def make_action(sid):
+            def action(item):
+                log(f"Selected session: {sid}", LogType.Default)
+                config_manager.set_selected_session(sid)
+            return action
+
+        def make_checked(sid):
+            return lambda item: config_manager.get_selected_session() == sid
+
+        menu_items.append(
+            pystray.MenuItem(
+                session_id,
+                make_action(session_id),
+                checked=make_checked(session_id),
+                radio=True
+            )
+        )
+
+    # Если сохранённая сессия отсутствует в текущем списке - добавить её как "inactive"
+    if selected_session and selected_session not in session_ids_set and selected_session != "Automatic":
+        def make_action_inactive():
+            return lambda item: config_manager.set_selected_session(selected_session)
+
+        def make_checked_inactive():
+            return lambda item: config_manager.get_selected_session() == selected_session
+
+        menu_items.append(
+            pystray.MenuItem(
+                f"{selected_session} (inactive)",
+                make_action_inactive(),
+                checked=make_checked_inactive(),
+                radio=True
+            )
+        )
+
+    return pystray.Menu(*menu_items)
 
 
 # Функция для создания меню на основе переданных параметров
@@ -705,27 +806,8 @@ def create_rpc_settings_menu():
         pystray.MenuItem("RPC Language", language_config_menu),
     )
 
-# Функция для обновления имени аккаунта в меню
-def update_account_name(icon, new_account_name):
-    rpcSettingsMenu = create_rpc_settings_menu()
-    settingsMenu = pystray.Menu(
-        pystray.MenuItem(f"Logged in as - {new_account_name}", lambda: None, enabled=False),
-        pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
-        pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find)
-    )
-
-    icon.menu = pystray.Menu(
-        pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
-        pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
-        pystray.MenuItem("Yandex settings", settingsMenu),
-        pystray.MenuItem("RPC settings", rpcSettingsMenu),
-        pystray.MenuItem("GitHub", tray_click),
-        pystray.MenuItem("Exit", tray_click)
-    )
-
 # Функция для создания иконки с меню
-def create_tray_icon():
-    tray_image = Image.open(Get_IconPath())
+def build_tray_menu(icon=None):
     account_name = get_account_name()
     rpcSettingsMenu = create_rpc_settings_menu()
 
@@ -735,19 +817,30 @@ def create_tray_icon():
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
     )
 
-    icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
+    return pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
         pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
         pystray.MenuItem("Yandex settings", settingsMenu),
         pystray.MenuItem("RPC settings", rpcSettingsMenu),
+        pystray.MenuItem("Select Application", create_session_toggle_menu(icon) if icon else pystray.MenuItem("Loading...", lambda: None, enabled=False)),
         pystray.MenuItem("GitHub", tray_click),
         pystray.MenuItem("Exit", tray_click)
-    ))
-    return icon
+    )
 
-# Функция для запуска иконки в отдельном потоке
-def tray_thread(icon):
-    icon.run()
+def update_tray():
+    global iconTray
+    if iconTray is not None:
+        iconTray.menu = build_tray_menu(iconTray)
+
+# Функция для запуска иконки
+def tray_thread(initial_menu):
+    global iconTray
+    tray_image = Image.open(Get_IconPath())
+    icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=initial_menu)
+    iconTray = icon
+
+    icon.run_detached()
+    update_tray()
 
 def Is_already_running():
     hwnd = win32gui.FindWindow(None, "WinYandexMusicRPC - Console")
@@ -881,7 +974,7 @@ def Init_yaToken(forceGet = False):
             Presence.client = Client(token=ya_token).init()
             log(f"Logged in as - {get_account_name()}", LogType.Update_Status)
             if Is_run_by_exe():
-                update_account_name(mainMenu, get_account_name())
+                update_tray()
         except Exception as exception:
             Handle_exception(exception)
     if not Presence.client:
@@ -914,7 +1007,7 @@ if __name__ == '__main__':
             # Загрузка настроек
             get_saves_settings(True)
             # Запуск потока для трея
-            mainMenu = create_tray_icon()
+            mainMenu = build_tray_menu()
             icon_thread = threading.Thread(target=tray_thread, args=(mainMenu,))
             icon_thread.daemon = True
             icon_thread.start()
