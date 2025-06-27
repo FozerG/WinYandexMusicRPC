@@ -45,7 +45,7 @@ CURRENT_VERSION = "v2.4.1"
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
 
 # (Опционально) Личный токен Яндекс.Музыки с подпиской Плюс (https://github.com/MarshalX/yandex-music-api/discussions/513)
-# - Используется для поиска треков которые не показываются без авторизации 
+# - Используется для поиска треков которые не показываются без авторизации
 # - Используется при использовании скрипта из стран где бесплатная Яндекс.Музыка не работает
 ya_token = str()
 
@@ -133,13 +133,13 @@ class Presence:
     rpc = None
     running = False
     paused = False
-    paused_time = 0 
+    paused_time = 0
     exe_names = ["Discord.exe", "DiscordCanary.exe", "DiscordPTB.exe", "Vesktop.exe"]
 
     @staticmethod
     def is_discord_running() -> bool:
         return any(name in (p.name() for p in psutil.process_iter()) for name in Presence.exe_names)
-        
+
     @staticmethod
     def connect_rpc():
         try:
@@ -157,12 +157,12 @@ class Presence:
         except Exception as e:
             log(f"Discord is not ready for a reason: {e}", LogType.Error)
             return None
-        
+
     @staticmethod
     def discord_available() -> bool:
         while True:
             if Presence.is_discord_running():
-                Presence.rpc = Presence.connect_rpc() 
+                Presence.rpc = Presence.connect_rpc()
                 if Presence.rpc:
                     log("Discord is ready for Rich Presence")
                     break
@@ -202,8 +202,8 @@ class Presence:
         Presence.currentTrack = None
         global name_prev
         name_prev = None
-        Presence.discord_available()    
-            
+        Presence.discord_available()
+
     # Метод для запуска Rich Presence.
     @staticmethod
     def start() -> None:
@@ -219,16 +219,16 @@ class Presence:
         while Presence.running:
             currentTime = time.time()
             if not Presence.is_discord_running():
-                Presence.discord_was_closed() 
+                Presence.discord_was_closed()
             if needRestart:
                 needRestart = False
                 Presence.restart()
             try:
                 ongoing_track = Presence.getTrack()
                 if Presence.currentTrack != ongoing_track: # проверяем что песня не играла до этого, т.к она просто может быть снята с паузы.
-                    if ongoing_track['success']: 
+                    if ongoing_track['success']:
                         if Presence.currentTrack is not None and 'label' in Presence.currentTrack and Presence.currentTrack['label'] is not None:
-                            if ongoing_track['label'] != Presence.currentTrack['label']: 
+                            if ongoing_track['label'] != Presence.currentTrack['label']:
                                 log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
                         else:
                             log(f"Changed track to {ongoing_track['label']}", LogType.Update_Status)
@@ -250,7 +250,7 @@ class Presence:
 
                         if button_config != ButtonConfig.NEITHER:
                             presence_args['buttons'] = build_buttons(ongoing_track['link'])
-                            
+
                         if activityType_config == ActivityTypeConfig.LISTENING:
                             presence_args['small_image'] = "https://raw.githubusercontent.com/FozerG/WinYandexMusicRPC/main/assets/Playing.png"
                             presence_args['small_text'] = "Playing" if language_config == LanguageConfig.ENGLISH else "Проигрывается"
@@ -302,7 +302,7 @@ class Presence:
 
                 time.sleep(3)
             except pypresence.exceptions.PipeClosed:
-                Presence.discord_was_closed()        
+                Presence.discord_was_closed()
             except Exception as e:
                 log(f"Presence class stopped for a reason: {e}", LogType.Error)
 
@@ -355,7 +355,7 @@ class Presence:
                     findTrackNames = []
                     findTrackNames.append(', '.join(artists) + " - " + trackFromSearch.title)
 
-                # Также может отличаться регистр, так что приведём всё в один регистр.    
+                # Также может отличаться регистр, так что приведём всё в один регистр.
                 boolNameCorrect = any(name_current.lower() == element.lower() for element in findTrackNames)
 
                 if strong_find and not boolNameCorrect: #если strong_find и название трека не совпадает, продолжаем поиск
@@ -388,14 +388,14 @@ class Presence:
                     'og-image': "https://" + track.og_image[:-2] + "400x400"
                 }
         except Exception as exception:
-            Handle_exception(exception)  
+            Handle_exception(exception)
             return {'success': False}
 
 def format_duration(duration_ms):
     total_seconds = duration_ms // 1000
     minutes = total_seconds // 60
     seconds = total_seconds % 60
-    
+
     # Форматирование строки
     return f"{minutes}:{seconds:02}"
 
@@ -423,7 +423,7 @@ def build_buttons(url):
 def extract_deep_link(url):
     pattern = r"https://music.yandex.ru/album/(\d+)/track/(\d+)"
     match = re.match(pattern, url)
-    
+
     if match:
         album_id, track_id = match.groups()
         share_track_path = f"album/{album_id}/track/{track_id}"
@@ -437,15 +437,15 @@ def Handle_exception(exception): # Обработка json ошибок из Yan
     match = re.search(r'({.*?})', json_str)
     if match:
         json_str = match.group(1)
-        
+
     try:
         data = json.loads(json_str)
         error_name = data.get('name')
         if error_name:
             if error_name == 'Unavailable For Legal Reasons':
-                log("You are using Yandex music in a country where it is not available without authorization! Turn off VPN or login using a Yandex token.", LogType.Error)    
+                log("You are using Yandex music in a country where it is not available without authorization! Turn off VPN or login using a Yandex token.", LogType.Error)
             elif error_name == 'session-expired':
-                log("Your Yandex token is out of date or incorrect, login again.", LogType.Error)  
+                log("Your Yandex token is out of date or incorrect, login again.", LogType.Error)
             else:
                 log(f"Something happened: {exception}", LogType.Error)
         else:
@@ -463,25 +463,17 @@ def WaitAndExit():
     else:
         sys.exit(0)
 
-def contains_non_latin_chars(s):
-    """
-    Проверяет, содержит ли строка символы, отличные от английских букв,
-    цифр и стандартных знаков пунктуации.
-    """
-    allowed_chars = string.ascii_letters + string.digits + string.punctuation + " "
-    return any(char not in allowed_chars for char in s)
-
 def TrimString(string, maxChars):
     if len(string) > maxChars:
         return string[:maxChars] + "..."
     else:
         return string
-    
+
 def Single_char(s):
     if len(s) == 1:
         return f'"{s}"'
     return s
-    
+
 class LogType(Enum):
     Default = 0
     Notification = 1
@@ -506,7 +498,7 @@ def log(text, type = LogType.Default):
         message_color = reset_text
 
     print(f"{red_text}[WinYandexMusicRPC] -> {message_color}{text}{reset_text}")
-    
+
 
 def GetLastVersion(repoUrl):
     try:
@@ -521,7 +513,7 @@ def GetLastVersion(repoUrl):
             log(f"You are using the latest version of the script")
         else:
             log(f"You are using the beta version of the script", LogType.Notification)
-        
+
     except requests.exceptions.RequestException as e:
         log(f"Error getting latest version: {e}", LogType.Error)
 
@@ -538,7 +530,7 @@ def toggle_auto_start_windows():
     global auto_start_windows
     auto_start_windows = not auto_start_windows
     log(f'Bool auto_start_windows set state: {auto_start_windows}')
-    
+
     def create_shortcut(target, shortcut_path, description="", arguments=""):
         pythoncom.CoInitialize()  # Инициализируем COM библиотеки
         shell = Dispatch('WScript.Shell')  # Создаем объект для работы с ярлыками
@@ -572,12 +564,12 @@ def toggle_auto_start_windows():
                 winreg.CloseKey(key)
             except FileNotFoundError:
                 pass
-            
-        
+
+
     threading.Thread(target=change_setting, args=[auto_start_windows]).start() # Запускаем в отдельном потоке для оптимизации
 
 def is_in_autostart(): # Функция, которая при запуске программы проверяет, есть ли программа в автозапуске. Используется при подгрузке стартовых параметров
-    
+
     def is_in_startup():
         shortcut_path = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'YaMusicRPC.lnk')  # Определяем путь к ярлыку
         return os.path.exists(shortcut_path)  # Проверяем, существует ли ярлык в папке автозагрузки
@@ -590,9 +582,9 @@ def is_in_autostart(): # Функция, которая при запуске п
             return True
         except FileNotFoundError:
             return False  # Если параметр не найден, возвращаем False
-    
+
     return is_in_startup() or is_in_registry()  # Возвращаем True, если программа присутствует в автозапуске
-        
+
 def toggle_console():
     if win32gui.IsWindowVisible(window):
         win32gui.ShowWindow(window, win32con.SW_HIDE)
@@ -619,10 +611,10 @@ def get_account_name():
         return account_name
     except exceptions.UnauthorizedError:
         return "Invalid token."
-    
+
     except exceptions.NetworkError:
         return "Network error."
-    
+
     except Exception as e:
         return f"None"
 
@@ -646,7 +638,7 @@ def get_saves_settings(fromStart = False):
     if fromStart:
         log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}", LogType.Update_Status)
 
-    
+
 # Функция для создания меню на основе переданных параметров
 def create_enum_menu(enum_class, get_setting_func, set_setting_func):
     return pystray.Menu(
@@ -691,7 +683,7 @@ def create_rpc_settings_menu():
     activity_type_menu = create_enum_menu(ActivityTypeConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'activity_type', enum_type), set_activity_type)
     button_config_menu = create_enum_menu(ButtonConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'buttons_settings', enum_type), set_button_config)
     language_config_menu = create_enum_menu(LanguageConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'language', enum_type), set_language_config)
-    
+
     return pystray.Menu(
         pystray.MenuItem('Activity Type', activity_type_menu),
         pystray.MenuItem('RPC Buttons', button_config_menu),
@@ -706,7 +698,7 @@ def update_account_name(icon, new_account_name):
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find)
     )
-    
+
     icon.menu = pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
         pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
@@ -721,13 +713,13 @@ def create_tray_icon():
     tray_image = Image.open(Get_IconPath())
     account_name = get_account_name()
     rpcSettingsMenu = create_rpc_settings_menu()
-    
+
     settingsMenu = pystray.Menu(
         pystray.MenuItem(f"Logged in as - {account_name}", lambda: None, enabled=False),
         pystray.MenuItem('Login to account...', lambda: Init_yaToken(True)),
         pystray.MenuItem('Toggle strong_find', toggle_strong_find, checked=lambda item: strong_find),
     )
-    
+
     icon = pystray.Icon("WinYandexMusicRPC", tray_image, "WinYandexMusicRPC", menu=pystray.Menu(
         pystray.MenuItem("Hide/Show Console", toggle_console, default=True),
         pystray.MenuItem('Start with Windows', toggle_auto_start_windows, checked=lambda item: auto_start_windows),
@@ -775,14 +767,14 @@ def Check_conhost():
             except Exception:
                 print(f"Couldnt close the process: {first_pid}")
 
-def Show_Console_Permanent():  
+def Show_Console_Permanent():
     try:
         win32gui.ShowWindow(window, win32con.SW_RESTORE)
         win32gui.SetForegroundWindow(window)
     except Exception as e:
         log(f"We cant show the window {e}",LogType.Error)
 
-def Check_run_by_startup():  
+def Check_run_by_startup():
     # Если приложение запущено через автозагрузку, скрываем окно консоли сразу.
     # Если приложение запущено вручную, показываем окно консоли на 3 секунды и затем сворачиваем.
     if window:
@@ -790,16 +782,16 @@ def Check_run_by_startup():
             Show_Console_Permanent()
             log("Minimize to system tray in 3 seconds...")
             time.sleep(3)
-        win32gui.ShowWindow(window, win32con.SW_HIDE)  
+        win32gui.ShowWindow(window, win32con.SW_HIDE)
     else:
         log("Console window not found", LogType.Error)
 
-def Run_by_startup_without_conhost():  
+def Run_by_startup_without_conhost():
     # Функция для автозагрузки без лаунчера (Windows 11), скрывает окно консоли при запуске через автозагрузку.
     window = win32console.GetConsoleWindow()
     if window:
         if '--run-through-startup' in sys.argv:
-            win32gui.ShowWindow(window, win32con.SW_HIDE)  
+            win32gui.ShowWindow(window, win32con.SW_HIDE)
     else:
         log("Console window not found", LogType.Error)
 
@@ -826,9 +818,9 @@ def Is_run_by_exe():
 
 def Blur_string(s: str) -> str:
     if s is None:
-        return ''  
+        return ''
     if len(s) <= 8:
-        return s 
+        return s
     return s[:4] + '*' * (len(s) - 8) + s[-4:]
 
 def Remove_yaToken_From_Memmory():
@@ -837,7 +829,7 @@ def Remove_yaToken_From_Memmory():
         log("Old token has been removed from memory.", LogType.Update_Status)
 
 def update_token_task(icon_path, result_queue):
-    result = getToken.update_token(icon_path)
+    result = getToken.get_yandex_music_token(icon_path)
     result_queue.put(result)
 
 def Init_yaToken(forceGet = False):
@@ -850,7 +842,7 @@ def Init_yaToken(forceGet = False):
             process = multiprocessing.Process(target=update_token_task, args=(Get_IconPath(), result_queue))
             process.start()
             process.join()
-            token = result_queue.get()            
+            token = result_queue.get()
             if token is not None and len(token) > 10:
                 keyring.set_password('WinYandexMusicRPC', 'token', token)
                 log(f"Successfully received the token: {Blur_string(token)}", LogType.Update_Status)
@@ -876,10 +868,10 @@ def Init_yaToken(forceGet = False):
             if Is_run_by_exe():
                 update_account_name(mainMenu, get_account_name())
         except Exception as exception:
-            Handle_exception(exception)  
+            Handle_exception(exception)
     if not Presence.client:
         log("Continue without a token...", LogType.Default)
-                
+
 
 
 def Get_IconPath():
@@ -893,7 +885,7 @@ def Get_IconPath():
         return f"{resources_path}/assets/YMRPC_ico.ico"
     except Exception:
         return None
-    
+
 
 
 if __name__ == '__main__':
@@ -907,22 +899,22 @@ if __name__ == '__main__':
             # Загрузка настроек
             get_saves_settings(True)
             # Запуск потока для трея
-            mainMenu = create_tray_icon() 
+            mainMenu = create_tray_icon()
             icon_thread = threading.Thread(target=tray_thread, args=(mainMenu,))
             icon_thread.daemon = True
             icon_thread.start()
 
             # Получение окна консоли
             window = win32console.GetConsoleWindow()
-            
+
             if Is_already_running():
                 log("WinYandexMusicRPC is already running.", LogType.Error)
                 Show_Console_Permanent()
                 WaitAndExit()
-            
+
             # Установка заголовка окна консоли
             win32console.SetConsoleTitle("WinYandexMusicRPC - Console")
-            
+
             # Отключение кнопки закрытия консоли
             Disable_close_button()
             Check_run_by_startup()
@@ -933,12 +925,9 @@ if __name__ == '__main__':
         # Проверка наличия токена в памяти
         Init_yaToken(False)
 
-        if contains_non_latin_chars(os.path.abspath(sys.argv[0])):
-            log("Unsupported symbols were found in the program path. Please move the script to the correct path. Current path:" + os.path.abspath(sys.argv[0]), LogType.Error)
-
-        # Запуск Presence   
+        # Запуск Presence
         Presence.start()
-        
+
     except KeyboardInterrupt:
         log("Keyboard interrupt received, stopping...")
         Presence.stop()
