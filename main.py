@@ -505,7 +505,7 @@ def WaitAndExit():
     if Is_run_by_exe():
         win32gui.ShowWindow(window, win32con.SW_SHOW)
     Presence.stop()
-    input("Press Enter to close the program.")
+    input("Press Enter to close the program.\n")
     if Is_run_by_exe():
         win32gui.PostMessage(window, win32con.WM_CLOSE, 0, 0)
     else:
