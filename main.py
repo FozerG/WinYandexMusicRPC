@@ -39,7 +39,7 @@ CLIENT_ID_RU = '1217562797999784007' #Яндекс Музыка
 CLIENT_ID_RU_DECLINED = '1269826362399522849' #Яндекс Музыку (склонение для активности "Слушает")
 
 # Версия (tag) скрипта для проверки на актуальность через Github Releases
-CURRENT_VERSION = "v2.5"
+CURRENT_VERSION = "v2.5.1"
 
 # Ссылка на репозиторий
 REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
@@ -68,11 +68,11 @@ result_queue = multiprocessing.Queue()
 # Переменная для проверки необходимости запуска рестарта в главном потоке Presence
 needRestart  = False
 
-# Переменная для печати сообщения при первом вызове метода getTrack()
-isFirstTrackCall = True
-
 # Переменная для хранения иконки в трее
 iconTray = True
+
+# Переменная для хранения MediaManager.request_async что бы избежать лишних вызовов
+media_sessions = None
 
 #Менеджер настроек
 config_manager = ConfigManager()
@@ -110,9 +110,17 @@ class PlaybackStatus(Enum):
 
 # Функция для получения информации о мультимедийном контенте через Windows SDK
 async def get_media_info():
-    sessions = await MediaManager.request_async()
-    current_session = sessions.get_current_session()
-    all_sessions = sessions.get_sessions()
+    global media_sessions
+    if media_sessions is None:
+        try:
+            log("Making the first request to windows MediaManager...", LogType.Default)
+            media_sessions = await MediaManager.request_async()
+        except Exception as e:
+            log(f"Failed to get MediaManager sessions: {e}", LogType.Error)
+            return None
+
+    current_session = media_sessions.get_current_session()
+    all_sessions = media_sessions.get_sessions()
     selected_session_id = config_manager.get_selected_session()
     target_session = None
     if selected_session_id and selected_session_id != "Automatic":
@@ -125,7 +133,7 @@ async def get_media_info():
         if not target_session:
             raise Exception(f"Selected session '{selected_session_id}' not found.")
     else:
-        target_session = sessions.get_current_session()
+        target_session = media_sessions.get_current_session()
 
     if target_session:
         info = await target_session.try_get_media_properties_async()
@@ -148,10 +156,17 @@ async def get_media_info():
     raise Exception('The music is not playing right now.')
 
 async def get_session_ids():
-    sessions = await MediaManager.request_async()
+    global media_sessions
+    if media_sessions is None:
+        try:
+            log("Making the first request to windows MediaManager...", LogType.Default)
+            media_sessions = await MediaManager.request_async()
+        except Exception as e:
+            log(f"Failed to get MediaManager sessions: {e}", LogType.Error)
+            return None
     return [
         session.source_app_user_model_id or "UnknownApp"
-        for session in sessions.get_sessions()
+        for session in media_sessions.get_sessions()
     ]
 
 class Presence:
@@ -336,15 +351,9 @@ class Presence:
     # Метод для получения информации о текущем треке.
     @staticmethod
     def getTrack() -> dict:
-        global name_prev, strong_find, isFirstTrackCall
+        global name_prev, strong_find
         try:
-            if isFirstTrackCall:
-                log("Making the first request to windows MediaManager...", LogType.Default)
-                isFirstTrackCall = False
-
-            async def _get_media_info_with_timeout():
-                return await asyncio.wait_for(get_media_info(), timeout=10)
-            current_media_info = asyncio.run(_get_media_info_with_timeout())
+            current_media_info = run_async(get_media_info(), timeout=10)
 
             if not current_media_info:
                 log("No media information returned from get_media_info", LogType.Error)
@@ -624,6 +633,7 @@ def is_in_autostart(): # Функция, которая при запуске п
 
     return is_in_startup() or is_in_registry()  # Возвращаем True, если программа присутствует в автозапуске
 
+
 def toggle_console():
     if win32gui.IsWindowVisible(window):
         win32gui.ShowWindow(window, win32con.SW_HIDE)
@@ -677,12 +687,26 @@ def get_saves_settings(fromStart = False):
     if fromStart:
         log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}, selected_session = {config_manager.get_selected_session()}", LogType.Update_Status)
 
+def run_async(coro, timeout=15):
+    """
+    Безопасно запускает асинхронную корутину из синхронного контекста.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    else:
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        return future.result(timeout=timeout)
+
 def create_session_toggle_menu(icon):
     try:
-        session_ids = asyncio.run(get_session_ids())
-    except RuntimeError:
-        loop = asyncio.get_event_loop()
-        session_ids = loop.run_until_complete(get_session_ids())
+        session_ids = run_async(get_session_ids(), timeout=10)
+    except Exception as e:
+        log(f"Failed to get session IDs for tray menu: {e}", LogType.Error)
+        session_ids = []
 
     menu_items = []
 

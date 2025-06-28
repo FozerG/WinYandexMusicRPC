@@ -1,4 +1,4 @@
-#define ScriptVersion "2.5"
+#define ScriptVersion "2.5.1"
 [Setup]
 AppName=WinYandexMusicRPC
 AppPublisher=FozerG
