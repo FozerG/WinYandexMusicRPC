@@ -1,3 +1,35 @@
+
+<div align="right">
+  <details>
+    <summary >🌐 Language</summary>
+    <div>
+      <div align="center">
+        <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=en">English</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=zh-CN">简体中文</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=zh-TW">繁體中文</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=ja">日本語</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=ko">한국어</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=hi">हिन्दी</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=th">ไทย</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=fr">Français</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=de">Deutsch</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=es">Español</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=it">Italiano</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=ru">Русский</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=pt">Português</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=nl">Nederlands</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=pl">Polski</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=ar">العربية</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=fa">فارسی</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=tr">Türkçe</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=vi">Tiếng Việt</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=id">Bahasa Indonesia</a>
+        | <a href="https://openaitx.github.io/view.html?user=FozerG&project=WinYandexMusicRPC&lang=as">অসমীয়া</
+      </div>
+    </div>
+  </details>
+</div>
+
 # **<img src="./assets/YMRPC_ico.ico" alt="[DISCORD RPC]" width="30"/> &nbsp;WinSdk + Yandex Music Discord Rich Presence**
 [![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
 
