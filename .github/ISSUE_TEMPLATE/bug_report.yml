@@ -14,7 +14,7 @@ body:
     attributes:
       label: Описание проблемы
       description: Опишите проблему, с которой вы столкнулись
-      placeholder: Я столкнулся с проблемой: ...
+      placeholder: "Я столкнулся с проблемой: ..."
     validations:
       required: true
   - type: textarea
@@ -41,7 +41,7 @@ body:
     attributes:
       label: Операционная система
       description: Какая у вас операционная система?
-      placeholder: Например: Windows 10 LTSC 21H2
+      placeholder: "Например: Windows 10 LTSC 21H2"
     validations:
       required: true
   - type: input
@@ -49,6 +49,6 @@ body:
     attributes:
       label: Плеер для прослушивания музыки
       description: Через что вы слушаете музыку? (браузер/приложение Я.Музыка)
-      placeholder: Например: Mozilla Firefox 127.0.1 (64-bit)
+      placeholder: "Например: Mozilla Firefox 127.0.1 (64-bit)"
     validations:
       required: true
