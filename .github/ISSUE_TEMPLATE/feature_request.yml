@@ -9,6 +9,7 @@ body:
         Спасибо за ваше предложение!
         
         Пожалуйста, убедитесь, что подобная функция ещё не была предложена в других issues.
+        
   - type: checkboxes
     id: searched
     attributes:
@@ -26,17 +27,9 @@ body:
     validations:
       required: true
   - type: textarea
-    id: motivation
-    attributes:
-      label: Мотивация
-      description: Почему эта функция будет полезна? Какую проблему она решает?
-      placeholder: "Эта функция решит проблему..."
-    validations:
-      required: true
-  - type: textarea
     id: solution
     attributes:
-      label: Предлагаемое решение (опционально)
+      label: Предлагаемое решение
       description: Если у вас есть идеи о том, как это можно реализовать, опишите их
       placeholder: "Можно реализовать через..."
     validations:
