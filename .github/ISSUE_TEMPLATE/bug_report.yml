@@ -33,18 +33,12 @@ body:
       placeholder: Вы можете перетащить изображения или файлы сюда
     validations:
       required: false
-  - type: dropdown
+  - type: input
     id: os
     attributes:
       label: Операционная система
       description: Какая у вас операционная система?
-      options:
-        - Windows 11
-        - Windows 10
-        - Windows 10 LTSC
-        - Windows 8.1
-        - Windows 7
-        - Свой вариант
+      placeholder: "Например: Windows 10 LTSC 21H2"
     validations:
       required: true
   - type: dropdown
