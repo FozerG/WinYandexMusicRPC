@@ -9,23 +9,20 @@ body:
         Спасибо, что нашли время сообщить об ошибке!
         
         Пожалуйста, убедитесь, что вы используете последнюю версию приложения.
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Проверка существующих предложений
+      description: Я проверил существующие issues и обсуждения
+      options:
+        - label: Я проверил существующие issues и убедился, что подобное предложение отсутствует
+          required: true
   - type: textarea
     id: problem
     attributes:
       label: Описание проблемы
       description: Опишите проблему, с которой вы столкнулись
       placeholder: "Я столкнулся с проблемой: ..."
-    validations:
-      required: true
-  - type: textarea
-    id: steps
-    attributes:
-      label: Шаги для воспроизведения
-      description: Что вы сделали, чтобы получить эту проблему?
-      placeholder: |
-        1. Кликнул туда
-        2. Затем сюда
-        3. И увидел ошибку
     validations:
       required: true
   - type: textarea
@@ -36,19 +33,27 @@ body:
       placeholder: Вы можете перетащить изображения или файлы сюда
     validations:
       required: false
-  - type: input
+  - type: dropdown
     id: os
     attributes:
       label: Операционная система
       description: Какая у вас операционная система?
-      placeholder: "Например: Windows 10 LTSC 21H2"
+      options:
+        - Windows 11
+        - Windows 10
+        - Windows 10 LTSC
+        - Windows 8.1
+        - Windows 7
+        - Свой вариант
     validations:
       required: true
-  - type: input
+  - type: dropdown
     id: player
     attributes:
       label: Плеер для прослушивания музыки
-      description: Через что вы слушаете музыку? (браузер/приложение Я.Музыка)
-      placeholder: "Например: Mozilla Firefox 127.0.1 (64-bit)"
+      description: Через что вы слушаете музыку?
+      options:
+        - Браузер
+        - Приложение Я.Музыка
     validations:
       required: true
