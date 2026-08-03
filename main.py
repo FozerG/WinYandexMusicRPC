@@ -94,10 +94,21 @@ class LanguageConfig(Enum):
     ENGLISH = 0
     RUSSIAN = 1
 
+class PauseTimeConfig(Enum):
+    Immediately = 0
+    One_1 = 1
+    Five_5 = 5
+    Ten_10 = 10
+    Fifteen_15 = 15
+    Thirty_30 = 30
+    Hour = 60
+    Never = -1
+
 # Глобальные настройки для RPC. Загружаются из метода get_saves_settings()
 activityType_config = None
 button_config = None
 language_config = None
+pause_time = 5
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
@@ -335,10 +346,10 @@ class Presence:
 
                     elif ongoing_track['success'] and ongoing_track["playback"] != PlaybackStatus.Playing.name and Presence.paused and trackTime != 0:
                         Presence.paused_time = currentTime - trackTime
-                        if Presence.paused_time > 5 * 60:  # если пауза больше 5 минут
+                        if pauseTime_config.value >= 0 and Presence.paused_time > pauseTime_config.value * 60:  # если пауза больше pauseTime_config.value минут
                             trackTime = 0
                             Presence.rpc.clear()
-                            log(f"Clear RPC due to paused for more than 5 minutes", LogType.Update_Status)
+                            log(f"Clear RPC due to paused for more than {pauseTime_config.value} minute(s)", LogType.Update_Status)
                     else:
                         Presence.paused_time = 0  # если трек продолжает играть, сбрасываем paused_time
 
@@ -672,6 +683,7 @@ def get_saves_settings(fromStart = False):
     global activityType_config
     global button_config
     global language_config
+    global pauseTime_config
     global auto_start_windows
     global strong_find
 
@@ -679,13 +691,20 @@ def get_saves_settings(fromStart = False):
     activityType_config = config_manager.get_enum_setting('UserSettings', 'activity_type', ActivityTypeConfig, fallback=ActivityTypeConfig.LISTENING)
     button_config = config_manager.get_enum_setting('UserSettings', 'buttons_settings', ButtonConfig, fallback=ButtonConfig.BOTH)
     language_config = config_manager.get_enum_setting('UserSettings', 'language', LanguageConfig, fallback=LanguageConfig.RUSSIAN)
+    pauseTime_config = config_manager.get_enum_setting('UserSettings', 'pause_time', PauseTimeConfig, fallback=PauseTimeConfig.Five_5)
 
     # Загрузка значения strong_find из конфигурации
     strong_find_str = config_manager.get_setting('UserSettings', 'strong_find', fallback='True')  # По умолчанию 'True'
     strong_find = strong_find_str.lower() == 'true'  # Преобразуем строку в булевое значение
 
     if fromStart:
-        log(f"Loaded settings: {Style.RESET_ALL}activityType_config = {activityType_config.name}, button_config = {button_config.name}, language_config = {language_config.name}, strong_find = {strong_find}, selected_session = {config_manager.get_selected_session()}", LogType.Update_Status)
+        log(f"Loaded settings:\
+            {Style.RESET_ALL}activityType_config = {activityType_config.name},\
+            button_config = {button_config.name},\
+            language_config = {language_config.name},\
+            strong_find = {strong_find},\
+            selected_session = {config_manager.get_selected_session()}\
+            pause_time = {pauseTime_config}", LogType.Update_Status)
 
 def run_async(coro, timeout=15):
     """
@@ -818,16 +837,25 @@ def set_language_config(value):
     get_saves_settings()
     Presence.need_restart()
 
+def set_pause_time_config(value):
+    value = convert_to_enum(PauseTimeConfig, value)
+    config_manager.set_enum_setting('UserSettings', 'pause_time', value)
+    log(f"Setting has been changed : pause_time to {value.name}")
+    get_saves_settings()
+    Presence.need_restart()
+
 # Функция для создания настроек меню RPC
 def create_rpc_settings_menu():
     activity_type_menu = create_enum_menu(ActivityTypeConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'activity_type', enum_type), set_activity_type)
     button_config_menu = create_enum_menu(ButtonConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'buttons_settings', enum_type), set_button_config)
     language_config_menu = create_enum_menu(LanguageConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'language', enum_type), set_language_config)
+    pause_time_menu = create_enum_menu(PauseTimeConfig, lambda section, enum_type: config_manager.get_enum_setting(section, 'pause_time', enum_type), set_pause_time_config)
 
     return pystray.Menu(
         pystray.MenuItem('Activity Type', activity_type_menu),
         pystray.MenuItem('RPC Buttons', button_config_menu),
         pystray.MenuItem("RPC Language", language_config_menu),
+        pystray.MenuItem("Pause time", pause_time_menu),
     )
 
 # Функция для создания иконки с меню
