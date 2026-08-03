@@ -101,14 +101,14 @@ class PauseTimeConfig(Enum):
     Ten_10 = 10
     Fifteen_15 = 15
     Thirty_30 = 30
-    Hour = 60
+    Hour_60 = 60
     Never = -1
 
 # Глобальные настройки для RPC. Загружаются из метода get_saves_settings()
 activityType_config = None
 button_config = None
 language_config = None
-pause_time = 5
+pauseTime_config = None
 
 # Enum для статуса воспроизведения мультимедийного контента.
 class PlaybackStatus(Enum):
