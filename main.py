@@ -96,12 +96,12 @@ class LanguageConfig(Enum):
 
 class PauseTimeConfig(Enum):
     Immediately = 0
-    One_1 = 1
-    Five_5 = 5
-    Ten_10 = 10
-    Fifteen_15 = 15
-    Thirty_30 = 30
-    Hour_60 = 60
+    OneMinute = 1
+    FiveMinutes = 5
+    TenMinutes = 10
+    FifteenMinutes = 15
+    ThirtyMinute = 30
+    HourMinutes = 60
     Never = -1
 
 # Глобальные настройки для RPC. Загружаются из метода get_saves_settings()
@@ -698,13 +698,15 @@ def get_saves_settings(fromStart = False):
     strong_find = strong_find_str.lower() == 'true'  # Преобразуем строку в булевое значение
 
     if fromStart:
-        log(f"Loaded settings:\
-            {Style.RESET_ALL}activityType_config = {activityType_config.name},\
-            button_config = {button_config.name},\
-            language_config = {language_config.name},\
-            strong_find = {strong_find},\
-            selected_session = {config_manager.get_selected_session()}\
-            pause_time = {pauseTime_config}", LogType.Update_Status)
+        log(
+            f"Loaded settings: "
+            f"{Style.RESET_ALL}activityType_config = {activityType_config.name}, "
+            f"button_config = {button_config.name}, "
+            f"language_config = {language_config.name}, "
+            f"strong_find = {strong_find}, "
+            f"selected_session = {config_manager.get_selected_session()} "
+            f"pause_time = {pauseTime_config}",
+        LogType.Update_Status)
 
 def run_async(coro, timeout=15):
     """
@@ -840,7 +842,7 @@ def set_language_config(value):
 def set_pause_time_config(value):
     value = convert_to_enum(PauseTimeConfig, value)
     config_manager.set_enum_setting('UserSettings', 'pause_time', value)
-    log(f"Setting has been changed : pause_time to {value.name}")
+    log(f"Setting has been changed: pause_time to {value.name}")
     get_saves_settings()
     Presence.need_restart()
 
