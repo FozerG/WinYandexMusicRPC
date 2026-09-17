@@ -22,7 +22,7 @@ from . import __version__
 from .config import ConfigStore
 from .constants import resource_path
 from .fonts import load_fonts
-from .models import Buttons, DisplayFormat, Language, PlaybackStatus, Settings
+from .models import Buttons, CaptureMode, DisplayFormat, Language, PlaybackStatus, Settings
 from .presence import status_name
 from .theme import STYLE
 from .widgets import CoverArt, Dropdown, ToggleSwitch
@@ -39,6 +39,7 @@ class SettingsDialog(QDialog):
     def __init__(self, config: ConfigStore, sessions: tuple[str, ...], parent=None):
         super().__init__(parent)
         self.config = config
+        self._logged_in = False
         self.setWindowTitle("WinYandexMusicRPC")
         self.setWindowIcon(QIcon(str(resource_path("YMRPC_ico.ico"))))
         load_fonts()
@@ -66,6 +67,10 @@ class SettingsDialog(QDialog):
                 ("Трек", DisplayFormat.TRACK),
             ],
             settings.display_format,
+        )
+        self.capture_mode = self._combo(
+            [("Windows.Media.Control", CaptureMode.WINDOWS), ("Yandex Ynison", CaptureMode.YNISON)],
+            settings.capture_mode,
         )
         self.session = Dropdown()
         self.session.setMinimumWidth(220)
@@ -148,7 +153,10 @@ class SettingsDialog(QDialog):
         right.addWidget(self.pages, 1)
         root.addLayout(right, 1)
 
-        overview = self._page("Обзор", "Текущий трек и состояние Discord Rich Presence.")
+        overview = self._page("Обзор", "Текущий трек и состояние статуса Discord.")
+        self.capture_notice = self._label("", "warning")
+        overview.addWidget(self.capture_notice)
+        self._update_capture_notice()
         card = QFrame(objectName="card")
         now = QVBoxLayout(card)
         now.setContentsMargins(18, 18, 18, 18)
@@ -194,9 +202,12 @@ class SettingsDialog(QDialog):
         now.addWidget(self.track_link)
         overview.addWidget(card)
         overview.addSpacing(8)
-        overview.addWidget(self._label("Информация о поиске", "brand"))
-        overview.addWidget(self._label("3 источника", "muted"))
+        self.search_heading = self._label("Информация о поиске", "brand")
+        self.search_description = self._label("3 источника", "muted")
+        overview.addWidget(self.search_heading)
+        overview.addWidget(self.search_description)
         self.source_labels = {}
+        self.source_rows = {}
         for source, label in (
             ("Yandex", "Яндекс Музыка"),
             ("iTunes", "iTunes"),
@@ -207,22 +218,66 @@ class SettingsDialog(QDialog):
             status = self._label("—  Не использовался", "muted")
             row.addWidget(status)
             self.source_labels[source] = status
-            overview.addLayout(row)
+            container = QWidget()
+            container.setLayout(row)
+            row.setContentsMargins(0, 0, 0, 0)
+            overview.addWidget(container)
+            self.source_rows[source] = container
         overview.addStretch()
 
         activity = self._page("Активность", "Настройте, как музыка отображается в Discord.")
         self._row(activity, "Название статуса", "Яндекс Музыка, артист или трек", self.display)
-        self._row(activity, "Язык RPC", "Подписи и кнопки в Discord", self.language)
+        self._row(activity, "Язык статуса", "Подписи и кнопки в Discord", self.language)
         self._row(activity, "Ссылки на трек", "Кнопки доступного каталога", self.buttons)
         self._row(activity, "Отключение после паузы", "0 — скрывать сразу", self.pause_timeout)
         activity.addWidget(self.never_hide)
         activity.addStretch()
 
         capture = self._page("Захват медиа", "Выберите плеер и правила публикации.")
-        self._row(capture, "Приложение", "Активные медиасессии Windows", self.session)
-        capture.addSpacing(12)
-        capture.addWidget(self.show_unknown)
-        capture.addWidget(self.warning)
+        self._row(capture, "Режим захвата", "Источник текущего воспроизведения", self.capture_mode)
+        self.ynison_warning = self._label(
+            "Ynison получает состояние вашего аккаунта с серверов Яндекса, а не из медиасессий "
+            "компьютера. В статусе может отображаться музыка с телефона или другого устройства. "
+            "Также поддерживаются подкасты и ваши загруженные треки в Яндекс Музыке. "
+            "Режим экспериментальный: иногда сервер сообщает о паузе во время воспроизведения; "
+            "на телефонах обычно работает стабильнее. Требуется вход в аккаунт Яндекс.",
+            "warning",
+        )
+        capture.addWidget(self.ynison_warning)
+        self.windows_description = self._label(
+            "Windows.Media.Control получает название трека, исполнителя и состояние плеера "
+            "из Windows. Можно слушать музыку в VK, Spotify, Apple Music и других приложениях "
+            "или браузерах, которые передают эти данные Windows. Найденные в каталогах треки "
+            "появляются в статусе Discord.",
+            "warning",
+        )
+        capture.addWidget(self.windows_description)
+        self.ynison_controls = QWidget()
+        fix_layout = QHBoxLayout(self.ynison_controls)
+        fix_layout.setContentsMargins(0, 0, 0, 0)
+        self.fix_pause = ToggleSwitch("Исправлять паузу")
+        self.fix_pause.setChecked(settings.fix_ynison_pause)
+        fix_layout.addWidget(self.fix_pause)
+        fix_layout.addStretch()
+        pause_info = QPushButton(objectName="info")
+        pause_info.setIcon(QIcon(str(resource_path("info.svg"))))
+        pause_info.setIconSize(QSize(17, 17))
+        pause_info.setFixedSize(24, 24)
+        pause_info.setToolTip("Как работает исправление паузы?")
+        pause_info.setAccessibleName("Информация об исправлении паузы")
+        pause_info.clicked.connect(self._show_pause_info)
+        fix_layout.addWidget(pause_info)
+        capture.addWidget(self.ynison_controls)
+        self.windows_controls = QWidget()
+        windows_layout = QVBoxLayout(self.windows_controls)
+        windows_layout.setContentsMargins(0, 0, 0, 0)
+        windows_layout.setSpacing(12)
+        self._row(windows_layout, "Приложение", "Активные медиасессии Windows", self.session)
+        windows_layout.addWidget(self.show_unknown)
+        windows_layout.addWidget(self.warning)
+        capture.addWidget(self.windows_controls)
+        self.capture_mode.currentIndexChanged.connect(self._update_capture_mode)
+        self._update_capture_mode()
         capture.addStretch()
 
         application = self._page("Приложение", "Запуск, обновления и диагностика.")
@@ -256,11 +311,45 @@ class SettingsDialog(QDialog):
         right.addLayout(footer)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
-        for control in (self.language, self.buttons, self.display, self.session):
+        for control in (self.language, self.buttons, self.display, self.session, self.capture_mode):
             control.currentIndexChanged.connect(self._update_dirty)
         self.pause_timeout.valueChanged.connect(self._update_dirty)
         self.show_unknown.toggled.connect(self._update_dirty)
         self.never_hide.toggled.connect(self._update_dirty)
+        self.fix_pause.toggled.connect(self._update_dirty)
+
+    def _update_capture_mode(self):
+        ynison = self.capture_mode.currentData() == CaptureMode.YNISON
+        self.windows_controls.setVisible(not ynison)
+        self.windows_description.setVisible(not ynison)
+        self.ynison_warning.setVisible(ynison)
+        self.ynison_controls.setVisible(ynison)
+
+    def _update_capture_notice(self, auth_required=None):
+        ynison = self.config.settings.capture_mode == CaptureMode.YNISON
+        missing = not self._logged_in if auth_required is None else auth_required
+        self.capture_notice.setVisible(ynison and missing)
+        if ynison:
+            self.capture_notice.setText("Для работы режима Ynison войдите в аккаунт Яндекс.")
+            self.capture_notice.setStyleSheet(
+                "background: #351e22; color: #ffb4ba; border: 1px solid #85434b; "
+                "border-radius: 8px; padding: 12px;"
+            )
+
+    def _show_pause_info(self):
+        QMessageBox.information(
+            self,
+            "Исправление паузы Ynison",
+            "Яндекс Музыка в браузере и настольном приложении иногда передаёт через Ynison "
+            "статус «На паузе», хотя музыка играет. Эта проблема встречается давно; на телефонах "
+            "статус обычно передаётся корректно.\n\n"
+            "Переключатель позволяет сверять трек с медиасессиями этого компьютера через "
+            "Windows.Media.Control. Если совпадают название, исполнитель и длительность и "
+            "локальный плеер воспроизводит трек, программа исправляет паузу и использует его "
+            "текущую позицию. Для треков без исполнителя нужны точное совпадение названия и "
+            "разница длительности не больше двух секунд. Без подходящей локальной сессии "
+            "сохраняются данные Ynison.",
+        )
 
     @staticmethod
     def _label(text, name=""):
@@ -325,6 +414,8 @@ class SettingsDialog(QDialog):
     def set_account(self, text: str):
         self.account_label.setText(text)
         logged_in = text != "Без авторизации"
+        self._logged_in = logged_in
+        self._update_capture_notice()
         self.logout.setVisible(logged_in)
         self.login.setText("Сменить аккаунт" if logged_in else "Войти в Яндекс")
 
@@ -341,6 +432,15 @@ class SettingsDialog(QDialog):
         from html import escape
 
         media, track, state = value[:3]
+        ynison = self.config.settings.capture_mode == CaptureMode.YNISON
+        self.search_heading.setText("Источник воспроизведения" if ynison else "Информация о поиске")
+        capture_info = value[5] if len(value) > 5 else {}
+        self._update_capture_notice(capture_info.get("auth_required"))
+        device = capture_info.get("device") or "Ожидание данных об устройстве"
+        description = f"Устройство: {device}" if ynison else "3 источника"
+        if ynison and capture_info.get("pause_corrected"):
+            description += "\nПауза успешно исправлена через Windows.Media.Control"
+        self.search_description.setText(description)
         source_states = dict(value[3]) if len(value) > 3 else {}
         statuses = {
             "unused": ("—  Не использовался", "#9898a3"),
@@ -350,6 +450,7 @@ class SettingsDialog(QDialog):
             "unavailable": ("!  Ошибка запроса", "#efd497"),
         }
         for source, label in self.source_labels.items():
+            self.source_rows[source].setVisible(not ynison)
             text, color = statuses.get(source_states.get(source, "unused"), statuses["unused"])
             label.setText(text)
             label.setStyleSheet(f"color: {color};")
@@ -373,7 +474,11 @@ class SettingsDialog(QDialog):
         self.track_album.setText((media.album or (track.album if track else "")) if media else "")
         source = f"{media.source}  ·  " if media else ""
         source += (
-            f"Подтверждено: {track.source}"
+            (
+                "Получено напрямую из Ynison"
+                if state == "direct"
+                else f"Подтверждено: {track.source}"
+            )
             if track
             else {
                 "searching": "Ищем в каталогах…",
@@ -427,6 +532,8 @@ class SettingsDialog(QDialog):
 
     def _form_settings(self) -> Settings:
         return Settings(
+            capture_mode=CaptureMode(self.capture_mode.currentData()),
+            fix_ynison_pause=self.fix_pause.isChecked(),
             language=Language(self.language.currentData()),
             buttons=Buttons(self.buttons.currentData()),
             display_format=DisplayFormat(self.display.currentData()),
@@ -447,6 +554,7 @@ class SettingsDialog(QDialog):
         except (OSError, ValueError) as error:
             QMessageBox.warning(self, "Настройки не сохранены", str(error))
             return
+        self._update_capture_notice()
         self.saved.emit()
         self.save_button.hide()
         self.save_status.setText("Настройки применены")

@@ -1,7 +1,7 @@
 PyQt6==6.11.0
 PyQt6-WebEngine==6.11.0
-pypresence @ git+https://github.com/qwertyquerty/pypresence.git@e941a582d0aa920d5e51301fbc9744d6ab4a9603
-yandex-music==3.0.0
+pypresence==4.6.2
+yandex-music[ynison] @ git+https://github.com/MarshalX/yandex-music-api.git@0fa54f2d32084a9e461bce41890d1c9ab70d91aa
 keyring>=25.6,<26
 packaging>=24,<27
 pywin32>=310; sys_platform == "win32"
@@ -11,3 +11,5 @@ winrt-Windows.Foundation.Collections==3.2.1; sys_platform == "win32"
 winrt-Windows.Media==3.2.1; sys_platform == "win32"
 winrt-Windows.Media.Control==3.2.1; sys_platform == "win32"
 winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
+websockets==16.1.1
+betterproto==2.0.0b7

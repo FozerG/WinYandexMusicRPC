@@ -194,7 +194,8 @@ class TrayController:
         else:
             logger.error("Presence worker stopped unexpectedly")
             self.tray.showMessage(
-                APP_NAME, "Служба RPC остановлена. Перезапустите приложение и проверьте журнал."
+                APP_NAME,
+                "Обновление статуса остановлено. Перезапустите приложение и проверьте журнал.",
             )
 
     def shutdown(self) -> None:

@@ -10,11 +10,12 @@ from yandex_music import Client
 from .config import ConfigStore
 from .discord import DiscordConnection
 from .media import WindowsMediaSource
-from .models import Track
+from .models import CaptureMode, Track
 from .presence import PlaybackState, PresenceGrace, build_payload, client_id
 from .search import UNUSED_SOURCES, TrackResolver
 from .tokens import TokenStore
 from .version_check import latest_release
+from .ynison import YnisonSource, correct_pause
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class PresenceWorker(QThread):
     def __init__(self, config: ConfigStore, parent=None):
         super().__init__(parent)
         self.config = config
+        self._ynison_token = None
         self._stop = Event()
         self._wake = Event()
         self._commands: Queue[tuple[str, str | None]] = Queue()
@@ -59,6 +61,7 @@ class PresenceWorker(QThread):
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         media_loop = asyncio.new_event_loop()
         source = WindowsMediaSource()
+        ynison = YnisonSource()
         resolver = TrackResolver()
         discord = DiscordConnection()
         playback = PlaybackState()
@@ -71,6 +74,7 @@ class PresenceWorker(QThread):
         last_status = None
         confirmed = None
         last_ignored = None
+        last_corrected = None
         try:
             self._load_account(tokens, resolver)
             while not self._stop.is_set():
@@ -79,10 +83,48 @@ class PresenceWorker(QThread):
                 settings = self.config.settings
                 if settings != previous_settings:
                     grace = PresenceGrace()
+                    if settings.capture_mode != previous_settings.capture_mode:
+                        media_loop.run_until_complete(ynison.close())
+                        discord.publish(client_id(settings), None)
+                        playback = PlaybackState()
+                        confirmed = None
+                        last_media = None
+                        last_status = None
+                        logger.info("Capture mode changed: %s", settings.capture_mode.value)
                     if settings.selected_session != previous_settings.selected_session:
                         confirmed = None
                     previous_settings = settings
                 try:
+                    if settings.capture_mode == CaptureMode.YNISON:
+                        result = media_loop.run_until_complete(ynison.read(self._ynison_token))
+                        if settings.fix_ynison_pause:
+                            try:
+                                result = media_loop.run_until_complete(
+                                    asyncio.wait_for(correct_pause(result, source), timeout=2)
+                                )
+                            except TimeoutError:
+                                logger.debug("Ynison pause correction timed out")
+                        corrected = result.media.identity if result.pause_corrected else None
+                        if corrected and corrected != last_corrected:
+                            logger.info(
+                                "Ynison pause corrected via Windows.Media.Control: %s", corrected
+                            )
+                        last_corrected = corrected
+                        if settings != self.config.settings or self._stop.is_set():
+                            continue
+                        key = (
+                            (result.media.identity, result.media.status)
+                            if result.media
+                            else result.state
+                        )
+                        if key != last_media:
+                            logger.info(
+                                "Ynison capture: state=%s; media=%s", result.state, result.media
+                            )
+                            last_media = key
+                        self._publish_ynison(result, settings, playback, grace, discord)
+                        self._wake.wait(0.5)
+                        continue
                     media = media_loop.run_until_complete(source.read(settings.selected_session))
                     media_key = (media.identity, media.status) if media else None
                     if media_key != last_media:
@@ -163,14 +205,16 @@ class PresenceWorker(QThread):
                                     media.duration,
                                 )
                                 payload = build_payload(media, displayed, settings, time.time())
-                                status = "RPC активен" if track else "RPC: непроверенное медиа"
+                                status = (
+                                    "Статус активен" if track else "Статус: непроверенное медиа"
+                                )
                             else:
                                 status = {
                                     "searching": "Проверяем трек в каталогах…",
-                                    "unavailable": "RPC скрыт: не удалось проверить трек",
-                                }.get(search_state, "RPC скрыт: трек не найден")
+                                    "unavailable": "Статус скрыт: не удалось проверить трек",
+                                }.get(search_state, "Статус скрыт: трек не найден")
                     elif media is not None:
-                        status = "RPC скрыт после паузы"
+                        status = "Статус скрыт после паузы"
                     if self._stop.is_set():
                         break
                     if settings != self.config.settings:
@@ -219,6 +263,7 @@ class PresenceWorker(QThread):
                         self.sessions_changed.emit(session_ids)
                 self._wake.wait(1)
         finally:
+            media_loop.run_until_complete(ynison.close())
             discord.close()
             resolver.close()
             media_loop.run_until_complete(media_loop.shutdown_asyncgens())
@@ -226,9 +271,44 @@ class PresenceWorker(QThread):
             pythoncom.CoUninitialize()
             logger.info("Presence worker stopped")
 
+    def _publish_ynison(self, result, settings, playback, grace, discord):
+        media, track = result.media, result.track
+        visible = playback.visible(media, settings.pause_timeout, time.monotonic())
+        payload = build_payload(media, track, settings, time.time()) if visible and track else None
+        if grace.hold(
+            payload is not None, result.state in ("connecting", "unavailable"), time.monotonic()
+        ):
+            return
+        delivered = discord.publish(client_id(settings), payload)
+        status = {
+            "auth_required": "Ynison: войдите в аккаунт Яндекс",
+            "connecting": "Подключаемся к Ynison…",
+            "unavailable": "Ynison недоступен; повторное подключение…",
+            "unsupported": "Ynison: этот тип медиа не поддерживается",
+            "idle": "Ynison: ожидание воспроизведения",
+        }.get(result.state, "Статус активен" if visible else "Статус скрыт после паузы")
+        if delivered is False and payload is not None:
+            status = "Discord недоступен; ожидаем подключения"
+        self.status_changed.emit(status)
+        self.track_changed.emit(
+            (
+                media,
+                track,
+                result.state,
+                UNUSED_SOURCES,
+                "",
+                {
+                    "device": result.device_name,
+                    "pause_corrected": result.pause_corrected,
+                    "auth_required": result.state == "auth_required",
+                },
+            )
+        )
+
     def _load_account(self, tokens: TokenStore, resolver: TrackResolver) -> None:
         try:
             token = tokens.load()
+            self._ynison_token = token
             if token:
                 client = Client(token=token)
                 resolver.set_client(client)
@@ -249,11 +329,13 @@ class PresenceWorker(QThread):
             try:
                 if action == "login" and token:
                     client = tokens.validate_and_save(token)
+                    self._ynison_token = token
                     resolver.set_client(client)
                     self.account_changed.emit(client.me.account.display_name or "Аккаунт Яндекса")
                     self.authentication_finished.emit(True, "Вход выполнен")
                 elif action == "logout":
                     tokens.delete()
+                    self._ynison_token = None
                     resolver.set_client(None)
                     self.account_changed.emit("Без авторизации")
                     self.authentication_finished.emit(True, "Вы вышли из аккаунта")

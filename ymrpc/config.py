@@ -6,7 +6,7 @@ from pathlib import Path
 from threading import RLock
 
 from .constants import APP_NAME
-from .models import Buttons, DisplayFormat, Language, Settings
+from .models import Buttons, CaptureMode, DisplayFormat, Language, Settings
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,8 @@ class ConfigStore:
         except ValueError:
             timeout = 300
         return Settings(
+            capture_mode=enum_value("capture_mode", CaptureMode, CaptureMode.WINDOWS),
+            fix_ynison_pause=str(section.get("fix_ynison_pause", "False")).lower() == "true",
             buttons=enum_value("buttons_settings", Buttons, Buttons.BOTH),
             language=enum_value("language", Language, Language.RUSSIAN),
             display_format=enum_value("display_format", DisplayFormat, DisplayFormat.ARTIST_TRACK),
@@ -70,6 +72,8 @@ class ConfigStore:
             parser.remove_option("UserSettings", "strong_find")
             parser["UserSettings"].update(
                 {
+                    "capture_mode": settings.capture_mode.name,
+                    "fix_ynison_pause": str(settings.fix_ynison_pause),
                     "activity_type": settings.activity_type.name,
                     "buttons_settings": settings.buttons.name,
                     "language": settings.language.name,
