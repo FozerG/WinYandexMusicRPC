@@ -1,4 +1,4 @@
-#define ScriptVersion "2.5.1"
+#define ScriptVersion "3.0"
 [Setup]
 AppName=WinYandexMusicRPC
 AppPublisher=FozerG
@@ -37,8 +37,8 @@ russian.CreateDesktop=Создать значок на рабочем столе
 russian.AdditionalTasks=Дополнительные задачи
 
 [Files]
-Source: "dist\WinYandexMusicRPC-cli\WinYandexMusicRPC.exe"; DestDir: "{pf}\WinYandexMusicRPC"; Flags: ignoreversion
-Source: "dist\WinYandexMusicRPC-cli\_internal\*"; DestDir: "{pf}\WinYandexMusicRPC\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\WinYandexMusicRPC-gui\WinYandexMusicRPC.exe"; DestDir: "{pf}\WinYandexMusicRPC"; Flags: ignoreversion
+Source: "dist\WinYandexMusicRPC-gui\_internal\*"; DestDir: "{pf}\WinYandexMusicRPC\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\WinYandexMusicRPC"; Filename: "{pf}\WinYandexMusicRPC\WinYandexMusicRPC.exe"

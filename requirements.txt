@@ -1,22 +1,13 @@
-pypresence @ git+https://github.com/qwertyquerty/pypresence.git
-winrt-Windows.Foundation.Collections
-winrt-Windows.Storage.Streams
-winrt-Windows.Media.Control
-winrt-Windows.Foundation
-winrt-Windows.Media
-winrt-runtime
-winrt-sdk
-pyinstaller==6.5.0
-PyQt6
-PyQt6-WebEngine
-yandex-music
-packaging
-requests
-colorama
-pystray
-keyring
-pywin32
-Pillow
-asyncio
-psutil
-PyQt5
+PyQt6==6.11.0
+PyQt6-WebEngine==6.11.0
+pypresence @ git+https://github.com/qwertyquerty/pypresence.git@e941a582d0aa920d5e51301fbc9744d6ab4a9603
+yandex-music==3.0.0
+keyring>=25.6,<26
+packaging>=24,<27
+pywin32>=310; sys_platform == "win32"
+winrt-runtime==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation==3.2.1; sys_platform == "win32"
+winrt-Windows.Foundation.Collections==3.2.1; sys_platform == "win32"
+winrt-Windows.Media==3.2.1; sys_platform == "win32"
+winrt-Windows.Media.Control==3.2.1; sys_platform == "win32"
+winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
