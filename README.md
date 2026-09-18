@@ -9,7 +9,12 @@
 
 **Режим Ynison позволяет отображать музыку из Яндекс Музыки, которая сейчас воспроизводится на мобильном устройстве.**
 
-<img src="https://github.com/user-attachments/assets/e2741c91-565a-480e-92af-4aae95332fcb" alt="discord" width="340">
+<p>
+  <img src="https://github.com/user-attachments/assets/e2741c91-565a-480e-92af-4aae95332fcb" alt="discord" width="340" align="middle">&nbsp;&nbsp;&nbsp;
+  <img width="208" height="54" alt="discord-mini" src="https://github.com/user-attachments/assets/83ea88fb-6e4b-48fa-ab1b-7d4774a59ca4" align="middle" />
+</p>
+
+
 
 ## О программе
 
