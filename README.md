@@ -1,20 +1,24 @@
 # <img src="./assets/YMRPC_ico.ico" alt="[DISCORD STATUS]" width="30"/> &nbsp;WinYandexMusicRPC — Музыка в статусе Discord из любого приложения
-[![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
+[![TotalDownloads](https://img.shields.io/github/downloads/FozerG/WinYandexMusicRPC/total)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![Number of GitHub stars](https://img.shields.io/github/stars/FozerG/WinYandexMusicRPC?style=flat&label=Stars&logo=github&labelColor=444&color=DAAA3F&cacheSeconds=3600)](https://star-history.com/#FozerG/WinYandexMusicRPC&Date) [![LastRelease](https://img.shields.io/github/v/release/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download") [![CodeOpen](https://img.shields.io/github/languages/top/FozerG/WinYandexMusicRPC)](https://github.com/FozerG/WinYandexMusicRPC/blob/main/main.py "Show code") [![OS - Windows](https://img.shields.io/badge/OS-Windows-blue?logo=windows&logoColor=white)](https://github.com/FozerG/WinYandexMusicRPC/releases "Download")
 
 >Несмотря на неразумное решение о блокировке Discord в РФ, я продолжу поддерживать скрипт в рабочем состоянии, насколько это будет возможно 🕊️
 
 >[Мы будем пользоваться тем, что нам нравится.](https://github.com/Flowseal/zapret-discord-youtube)
 
-**Программа показывает музыку в статусе Discord из Яндекс Музыки, Spotify, Apple Music, браузеров и других приложений, которые передают медиаданные Windows.**
+**WinYandexMusicRPC** показывает вашим друзьям в Discord, какую музыку вы слушаете.
 
-**Режим Ynison позволяет отображать музыку из Яндекс Музыки, которая сейчас воспроизводится на мобильном устройстве.**
+Это работает с любым медиаплеером, будь то **Яндекс Музыка, Apple Music, Spotify, Youtube** или даже браузер. Программа показывает музыку в статусе Discord из приложений, которые передают медиаданные Windows.
+
+Режим **Ynison** позволяет отображать музыку из **Яндекс Музыки**, которая сейчас воспроизводится на мобильном устройстве.
 
 <p>
   <img src="https://github.com/user-attachments/assets/e2741c91-565a-480e-92af-4aae95332fcb" alt="discord" width="340" align="middle">&nbsp;&nbsp;&nbsp;
   <img width="208" height="54" alt="discord-mini" src="https://github.com/user-attachments/assets/83ea88fb-6e4b-48fa-ab1b-7d4774a59ca4" align="middle" />
 </p>
 
-
+## Скачать
+[<img src="https://github.com/user-attachments/assets/3e11edd6-74eb-4a30-a779-eae4302c9726" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.0/WinYandexMusicRPC_Installer_3.0.exe)
+[<img src="https://github.com/user-attachments/assets/bd6f2464-2404-49be-9364-821c626d4cd3" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.0/WinYandexMusicRPC_Portable_3.0.zip)
 
 ## О программе
 
