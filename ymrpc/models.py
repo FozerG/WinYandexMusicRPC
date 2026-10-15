@@ -3,6 +3,7 @@ from enum import IntEnum, StrEnum
 
 
 class ActivityType(IntEnum):
+    PLAYING = 0
     LISTENING = 2
 
 

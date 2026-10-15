@@ -22,7 +22,15 @@ from . import __version__
 from .config import ConfigStore
 from .constants import resource_path
 from .fonts import load_fonts
-from .models import Buttons, CaptureMode, DisplayFormat, Language, PlaybackStatus, Settings
+from .models import (
+    ActivityType,
+    Buttons,
+    CaptureMode,
+    DisplayFormat,
+    Language,
+    PlaybackStatus,
+    Settings,
+)
 from .presence import status_name
 from .theme import STYLE
 from .widgets import CoverArt, Dropdown, ToggleSwitch
@@ -47,6 +55,10 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(860, 610)
         self.setStyleSheet(STYLE)
         settings = config.settings
+        self.activity_type = self._combo(
+            [("Слушает", ActivityType.LISTENING), ("Играет", ActivityType.PLAYING)],
+            settings.activity_type,
+        )
         self.language = self._combo(
             [("Русский", Language.RUSSIAN), ("English", Language.ENGLISH)], settings.language
         )
@@ -226,6 +238,12 @@ class SettingsDialog(QDialog):
         overview.addStretch()
 
         activity = self._page("Активность", "Настройте, как музыка отображается в Discord.")
+        self._row(
+            activity,
+            "Тип активности",
+            "Слушает — под именем Discord; Играет — приоритет как у игр",
+            self.activity_type,
+        )
         self._row(activity, "Название статуса", "Яндекс Музыка, артист или трек", self.display)
         self._row(activity, "Язык статуса", "Подписи и кнопки в Discord", self.language)
         self._row(activity, "Ссылки на трек", "Кнопки доступного каталога", self.buttons)
@@ -311,7 +329,14 @@ class SettingsDialog(QDialog):
         right.addLayout(footer)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
-        for control in (self.language, self.buttons, self.display, self.session, self.capture_mode):
+        for control in (
+            self.activity_type,
+            self.language,
+            self.buttons,
+            self.display,
+            self.session,
+            self.capture_mode,
+        ):
             control.currentIndexChanged.connect(self._update_dirty)
         self.pause_timeout.valueChanged.connect(self._update_dirty)
         self.show_unknown.toggled.connect(self._update_dirty)
@@ -534,6 +559,7 @@ class SettingsDialog(QDialog):
         return Settings(
             capture_mode=CaptureMode(self.capture_mode.currentData()),
             fix_ynison_pause=self.fix_pause.isChecked(),
+            activity_type=ActivityType(self.activity_type.currentData()),
             language=Language(self.language.currentData()),
             buttons=Buttons(self.buttons.currentData()),
             display_format=DisplayFormat(self.display.currentData()),

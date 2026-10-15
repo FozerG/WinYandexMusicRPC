@@ -3,7 +3,6 @@ from typing import Any
 
 from .constants import ASSETS_URL, CLIENT_ID_EN, CLIENT_ID_RU_LISTENING
 from .models import (
-    ActivityType,
     Buttons,
     DisplayFormat,
     Language,
@@ -42,7 +41,7 @@ def build_payload(
     english = settings.language == Language.ENGLISH
     playing = media.status == PlaybackStatus.PLAYING
     payload: dict[str, Any] = {
-        "activity_type": ActivityType.LISTENING.value,
+        "activity_type": settings.activity_type.value,
         "details": discord_text(track.full_title, media.title),
         "state": discord_text(track.artist, "Unknown artist" if english else "Неизвестный артист"),
         "small_image": f"{ASSETS_URL}/{'Playing' if playing else 'Paused'}.png",
