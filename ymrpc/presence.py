@@ -3,7 +3,6 @@ from typing import Any
 
 from .constants import ASSETS_URL, CLIENT_ID_EN, CLIENT_ID_RU_LISTENING
 from .models import (
-    ActivityType,
     Buttons,
     DisplayFormat,
     Language,
@@ -25,11 +24,16 @@ def discord_text(value: str, fallback: str = "") -> str:
     return value + "\u200b" if len(value) == 1 else value
 
 
-def status_name(media: MediaSnapshot, track: Track | None, display: DisplayFormat) -> str:
+def status_name(
+    media: MediaSnapshot,
+    track: Track | None,
+    display: DisplayFormat,
+    language: Language = Language.RUSSIAN,
+) -> str:
     title = (track.full_title if track else "") or media.title
     artist = (track.artist if track else "") or media.artist
     return {
-        DisplayFormat.APPLICATION: "Яндекс Музыку",
+        DisplayFormat.APPLICATION: "Yandex Music" if language == Language.ENGLISH else "Яндекс Музыку",
         DisplayFormat.ARTIST: artist or title,
         DisplayFormat.TRACK: title,
         DisplayFormat.ARTIST_TRACK: " — ".join(part for part in (artist, title) if part),
@@ -42,7 +46,7 @@ def build_payload(
     english = settings.language == Language.ENGLISH
     playing = media.status == PlaybackStatus.PLAYING
     payload: dict[str, Any] = {
-        "activity_type": ActivityType.LISTENING.value,
+        "activity_type": settings.activity_type.value,
         "details": discord_text(track.full_title, media.title),
         "state": discord_text(track.artist, "Unknown artist" if english else "Неизвестный артист"),
         "small_image": f"{ASSETS_URL}/{'Playing' if playing else 'Paused'}.png",
@@ -52,7 +56,9 @@ def build_payload(
     }
     if track.cover:
         payload["large_image"] = track.cover
-    payload["name"] = discord_text(status_name(media, track, settings.display_format))
+    payload["name"] = discord_text(
+        status_name(media, track, settings.display_format, settings.language)
+    )
     if track.album:
         payload["large_text"] = discord_text(track.album)
     duration = media.duration or track.duration
