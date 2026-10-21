@@ -1,6 +1,11 @@
 """en translation catalog. Keep keys in sync with the other catalogs."""
 
 STRINGS = {
+    "capture.ynison_outage": (
+        "Yandex data centers were affected in October 2026, after which Ynison began "
+        "experiencing issues. Retrieving the current track from Yandex servers may still "
+        "be unavailable. Use Windows.Media.Control instead."
+    ),
     "activity.listening": "Listening",
     "activity.playing": "Playing",
     "language.russian": "Русский",

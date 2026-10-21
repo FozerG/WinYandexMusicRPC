@@ -239,6 +239,9 @@ class SettingsDialog(QDialog):
         self.search_description = self._translated_label("search.description", "muted")
         overview.addWidget(self.search_heading)
         overview.addWidget(self.search_description)
+        self.ynison_idle_notice = self._translated_label("capture.ynison_outage", "errorNotice")
+        self.ynison_idle_notice.hide()
+        overview.addWidget(self.ynison_idle_notice)
         self.source_labels = {}
         self.source_rows = {}
         for source, _ in UNUSED_SOURCES:
@@ -300,6 +303,8 @@ class SettingsDialog(QDialog):
             "warning",
         )
         capture.addWidget(self.ynison_warning)
+        self.ynison_outage_notice = self._translated_label("capture.ynison_outage", "errorNotice")
+        capture.addWidget(self.ynison_outage_notice)
         self.windows_description = self._translated_label(
             "capture.windows_description",
             "warning",
@@ -397,6 +402,7 @@ class SettingsDialog(QDialog):
         self.windows_controls.setVisible(not ynison)
         self.windows_description.setVisible(not ynison)
         self.ynison_warning.setVisible(ynison)
+        self.ynison_outage_notice.setVisible(ynison)
         self.ynison_controls.setVisible(ynison)
 
     def _update_capture_notice(self, auth_required=None):
@@ -527,6 +533,7 @@ class SettingsDialog(QDialog):
         if ynison and capture_info.get("pause_corrected"):
             description += tr("playback.pause_corrected")
         self.search_description.setText(description)
+        self.ynison_idle_notice.setVisible(ynison and state == "idle")
         source_states = dict(value[3]) if len(value) > 3 else {}
         statuses = {
             "unused": (tr("search.unused"), "#9898a3"),

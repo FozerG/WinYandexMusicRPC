@@ -1,6 +1,11 @@
 """ru translation catalog. Keep keys in sync with the other catalogs."""
 
 STRINGS = {
+    "capture.ynison_outage": (
+        "В октябре 2026 года пострадали дата-центры Яндекса, после чего возникли проблемы "
+        "с работой Ynison. Получение текущего трека через серверы Яндекса всё ещё может "
+        "быть недоступно. Используйте Windows.Media.Control."
+    ),
     "activity.listening": "Слушает",
     "activity.playing": "Играет",
     "language.russian": "Русский",

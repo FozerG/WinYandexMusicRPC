@@ -16,6 +16,8 @@ QLabel#tagline { color: #9898a3; font-weight: 400; }
 QLabel#warning { background: #30291c; color: #efd497; border: 1px solid #554629;
                   border-radius: 8px; padding: 12px; }
 QLabel#saved { color: #f5ca66; }
+QLabel#errorNotice { background: #351e22; color: #ffb4ba; border: 1px solid #85434b;
+                     border-radius: 8px; padding: 12px; }
 QFrame#card { background: #1a1a1d; border: 1px solid #333338; border-radius: 12px; }
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 13px 15px; margin: 3px 0; border-radius: 7px; }
