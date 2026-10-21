@@ -8,7 +8,9 @@ from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
 from .config import ConfigStore, data_directory
 from .constants import APP_NAME, REPO_URL, resource_path
+from .i18n import message, render, set_language, tr
 from .settings import SettingsDialog
+from .ui_i18n import bind_text, retranslate, show_message
 from .windows import autostart_enabled, set_autostart
 from .worker import PresenceWorker
 
@@ -19,6 +21,7 @@ class TrayController:
     def __init__(self, app: QApplication, config: ConfigStore):
         self.app = app
         self.config = config
+        set_language(config.settings.app_language)
         self.sessions: tuple[str, ...] = ()
         self.settings_dialog = None
         self.auth_dialog = None
@@ -29,15 +32,17 @@ class TrayController:
         self.tray = QSystemTrayIcon(QIcon(str(resource_path("YMRPC_ico.ico"))), app)
         self.tray.setToolTip(APP_NAME)
         self.menu = QMenu()
-        self._status_text = "Ожидание воспроизведения"
-        self._account_text = "Без авторизации"
+        self._status_text = message("status.waiting")
+        self._account_text = None
         self._autostart_enabled = autostart_enabled()
-        self.menu.addAction("Открыть WinYandexMusicRPC", self.open_settings)
+        bind_text(self.menu.addAction("", self.open_settings), "tray.open")
         self.menu.addSeparator()
-        self.menu.addAction("Открыть журнал", self._open_logs)
+        bind_text(self.menu.addAction("", self._open_logs), "logs.open")
         self.menu.addAction("GitHub", lambda: webbrowser.open(REPO_URL))
-        self.check_updates = self.menu.addAction("Проверить обновления", self._check_updates)
-        self.menu.addAction("Выход", self.quit)
+        self.check_updates = bind_text(
+            self.menu.addAction("", self._check_updates), "updates.check"
+        )
+        bind_text(self.menu.addAction("", self.quit), "tray.quit")
         self.tray.setContextMenu(self.menu)
         self.tray.activated.connect(self._activated)
         self.worker.sessions_changed.connect(self._sessions_changed)
@@ -58,7 +63,7 @@ class TrayController:
     def open_settings(self) -> None:
         if self.settings_dialog is None:
             self.settings_dialog = SettingsDialog(self.config, self.sessions)
-            self.settings_dialog.saved.connect(self.worker.refresh)
+            self.settings_dialog.saved.connect(self._settings_saved)
             self.settings_dialog.finished.connect(self._settings_closed)
             self.settings_dialog.login_requested.connect(self.open_auth)
             self.settings_dialog.logout_requested.connect(self._logout)
@@ -68,12 +73,17 @@ class TrayController:
             self.settings_dialog.set_account(self._account_text)
             self.settings_dialog.set_auth_busy(self._auth_busy)
             self.settings_dialog.set_autostart(self._autostart_enabled)
-            self.settings_dialog.status_label.setText(self._status_text)
+            self.settings_dialog.set_status(self._status_text)
             self.settings_dialog.set_track(self._track)
             self.settings_dialog.update_button.setEnabled(self.check_updates.isEnabled())
         self.settings_dialog.show()
         self.settings_dialog.raise_()
         self.settings_dialog.activateWindow()
+
+    def _settings_saved(self):
+        retranslate(self.menu)
+        self._status_changed(self._status_text)
+        self.worker.refresh()
 
     def _settings_closed(self) -> None:
         self.settings_dialog.deleteLater()
@@ -110,31 +120,31 @@ class TrayController:
             self.settings_dialog.update_button.setEnabled(False)
         self.worker.check_updates()
 
-    def _update_checked(self, message: str) -> None:
+    def _update_checked(self, message) -> None:
         self.check_updates.setEnabled(True)
         if self.settings_dialog:
             self.settings_dialog.update_button.setEnabled(True)
-        self.tray.showMessage(APP_NAME, message)
+        self.tray.showMessage(APP_NAME, render(message))
 
-    def _authentication_finished(self, success: bool, message: str) -> None:
+    def _authentication_finished(self, success: bool, message) -> None:
         self._set_auth_busy(False)
         icon = (
             QSystemTrayIcon.MessageIcon.Information
             if success
             else QSystemTrayIcon.MessageIcon.Warning
         )
-        self.tray.showMessage(APP_NAME, message, icon)
+        self.tray.showMessage(APP_NAME, render(message), icon)
 
     def _sessions_changed(self, sessions: tuple[str, ...]) -> None:
         self.sessions = sessions
         if self.settings_dialog is not None:
             self.settings_dialog.update_sessions(sessions)
 
-    def _status_changed(self, text: str) -> None:
+    def _status_changed(self, text) -> None:
         self._status_text = text
         if self.settings_dialog:
-            self.settings_dialog.status_label.setText(text)
-        self.tray.setToolTip(f"{APP_NAME}\n{text}"[:127])
+            self.settings_dialog.set_status(text)
+        self.tray.setToolTip(f"{APP_NAME}\n{render(text)}"[:127])
 
     def _set_autostart(self, enabled: bool) -> None:
         try:
@@ -143,7 +153,7 @@ class TrayController:
             logger.info("Windows autostart: %s", enabled)
         except OSError as error:
             self._autostart_enabled = autostart_enabled()
-            QMessageBox.warning(None, "Не удалось изменить автозапуск", str(error))
+            show_message(None, tr("app.autostart_failed"), str(error), QMessageBox.Icon.Warning)
         if self.settings_dialog:
             self.settings_dialog.set_autostart(self._autostart_enabled)
 
@@ -151,7 +161,9 @@ class TrayController:
         try:
             subprocess.Popen(["explorer.exe", "/select,", str(data_directory() / "rpc.log")])
         except OSError as error:
-            QMessageBox.warning(self.settings_dialog, "Журнал недоступен", str(error))
+            show_message(
+                self.settings_dialog, tr("logs.unavailable"), str(error), QMessageBox.Icon.Warning
+            )
 
     def _startup_updates(self):
         if not self._quitting:
@@ -177,7 +189,7 @@ class TrayController:
             return
         self._quitting = True
         self.menu.setEnabled(False)
-        self.tray.setToolTip("Завершение работы…")
+        self.tray.setToolTip(tr("app.quitting"))
         for dialog in (self.auth_dialog, self.settings_dialog):
             if dialog is not None:
                 dialog.close()
@@ -195,7 +207,7 @@ class TrayController:
             logger.error("Presence worker stopped unexpectedly")
             self.tray.showMessage(
                 APP_NAME,
-                "Обновление статуса остановлено. Перезапустите приложение и проверьте журнал.",
+                tr("app.worker_stopped"),
             )
 
     def shutdown(self) -> None:

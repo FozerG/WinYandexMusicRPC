@@ -11,6 +11,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QDialog, QVBoxLayout
 
 from .constants import OAUTH_URL, resource_path
+from .i18n import tr
 
 logger = logging.getLogger(__name__)
 CALLBACK_HOSTS = {"oauth.yandex.ru", "music.yandex.ru"}
@@ -53,7 +54,7 @@ class AuthorizationDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Вход в Яндекс Музыку")
+        self.setWindowTitle(tr("auth.title"))
         self.setWindowIcon(QIcon(str(resource_path("YMRPC_ico.ico"))))
         self.resize(700, 800)
         self._completed = False

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .constants import ASSETS_URL, CLIENT_ID_EN, CLIENT_ID_RU_LISTENING
+from .i18n import tr
 from .models import (
     Buttons,
     DisplayFormat,
@@ -24,6 +25,13 @@ def discord_text(value: str, fallback: str = "") -> str:
     return value + "\u200b" if len(value) == 1 else value
 
 
+def album_text(track: Track) -> str:
+    # A title track can share its album's name; use release metadata instead.
+    if track.album_track_count == 1 or track.release_type.strip().casefold() == "single":
+        return ""
+    return track.album.strip()
+
+
 def status_name(
     media: MediaSnapshot,
     track: Track | None,
@@ -33,7 +41,7 @@ def status_name(
     title = (track.full_title if track else "") or media.title
     artist = (track.artist if track else "") or media.artist
     return {
-        DisplayFormat.APPLICATION: "Yandex Music" if language == Language.ENGLISH else "Яндекс Музыку",
+        DisplayFormat.APPLICATION: tr("presence.application", language=language),
         DisplayFormat.ARTIST: artist or title,
         DisplayFormat.TRACK: title,
         DisplayFormat.ARTIST_TRACK: " — ".join(part for part in (artist, title) if part),
@@ -43,24 +51,23 @@ def status_name(
 def build_payload(
     media: MediaSnapshot, track: Track, settings: Settings, wall_time: float
 ) -> dict[str, Any]:
-    english = settings.language == Language.ENGLISH
+    language = settings.language
     playing = media.status == PlaybackStatus.PLAYING
     payload: dict[str, Any] = {
         "activity_type": settings.activity_type.value,
         "details": discord_text(track.full_title, media.title),
-        "state": discord_text(track.artist, "Unknown artist" if english else "Неизвестный артист"),
+        "state": discord_text(track.artist, tr("presence.unknown_artist", language=language)),
         "small_image": f"{ASSETS_URL}/{'Playing' if playing else 'Paused'}.png",
-        "small_text": ("Playing" if english else "Проигрывается")
-        if playing
-        else ("On pause" if english else "На паузе"),
+        "small_text": tr("presence.playing" if playing else "presence.paused", language=language),
     }
     if track.cover:
         payload["large_image"] = track.cover
     payload["name"] = discord_text(
         status_name(media, track, settings.display_format, settings.language)
     )
-    if track.album:
-        payload["large_text"] = discord_text(track.album)
+    album = album_text(track)
+    if album:
+        payload["large_text"] = discord_text(album)
     duration = media.duration or track.duration
     position = max(0, min(media.position, duration)) if duration else max(0, media.position)
     if playing:
@@ -69,13 +76,9 @@ def build_payload(
             payload["end"] = int(wall_time - position + duration)
     buttons = []
     if track.url and settings.buttons in (Buttons.YANDEX_MUSIC_WEB, Buttons.BOTH):
-        buttons.append(
-            {"label": "Open in browser" if english else "Откр. в браузере", "url": track.url}
-        )
+        buttons.append({"label": tr("presence.browser", language=language), "url": track.url})
     if track.app_url and settings.buttons in (Buttons.YANDEX_MUSIC_APP, Buttons.BOTH):
-        buttons.append(
-            {"label": "Open in app" if english else "Откр. в прилож.", "url": track.app_url}
-        )
+        buttons.append({"label": tr("presence.app", language=language), "url": track.app_url})
     if buttons:
         payload["buttons"] = buttons
     return payload

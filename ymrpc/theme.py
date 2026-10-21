@@ -12,7 +12,7 @@ QLabel#timecode { font-size: 11px; color: #c7c7d0; }
 QProgressBar#playbackProgress { background: #424249; border: none; border-radius: 2px; }
 QProgressBar#playbackProgress::chunk { background: #f5ca66; border-radius: 2px; }
 QLabel#muted { color: #9898a3; }
-QLabel#tagline { color: #9898a3; font-weight: 600; }
+QLabel#tagline { color: #9898a3; font-weight: 400; }
 QLabel#warning { background: #30291c; color: #efd497; border: 1px solid #554629;
                   border-radius: 8px; padding: 12px; }
 QLabel#saved { color: #f5ca66; }

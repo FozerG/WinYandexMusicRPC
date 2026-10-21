@@ -4,6 +4,7 @@ import signal
 import sys
 
 from . import __version__
+from .i18n import set_language, system_language, tr
 
 
 def _run() -> int:
@@ -26,6 +27,7 @@ def _run() -> int:
     from .fonts import application_font
     from .logging_setup import configure_logging
     from .tray import TrayController
+    from .ui_i18n import show_message
     from .windows import SingleInstance
 
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
@@ -35,6 +37,8 @@ def _run() -> int:
     app.setApplicationName("WinYandexMusicRPC")
     app.setWindowIcon(QIcon(str(resource_path("YMRPC_ico.ico"))))
     app.setQuitOnLastWindowClosed(False)
+    config = ConfigStore()
+    set_language(config.settings.app_language)
     if args.authorize_channel:
         from .authorization import run_authorization
 
@@ -50,7 +54,7 @@ def _run() -> int:
         from .settings import SettingsDialog
 
         browser = QWebEngineView()
-        dialog = SettingsDialog(ConfigStore(), ())
+        dialog = SettingsDialog(config, ())
         dialog.show()
         app.processEvents()
         screenshot = os.environ.get("YMRPC_SMOKE_SCREENSHOT")
@@ -84,14 +88,13 @@ def _run() -> int:
         if instance.already_running:
             if args.run_through_startup:
                 return 0
-            QMessageBox.information(
+            show_message(
                 None,
                 "WinYandexMusicRPC",
-                "Приложение уже запущено. Откройте настройки через значок в трее.",
+                tr("app.already_running"),
             )
             return 0
         configure_logging()
-        config = ConfigStore()
         logging.getLogger(__name__).info("Settings: %s", config.settings)
         controller = TrayController(app, config)
         app.aboutToQuit.connect(controller.shutdown)
@@ -105,10 +108,11 @@ def _run() -> int:
         return app.exec()
     except Exception:
         logging.getLogger(__name__).exception("Application startup failed")
-        QMessageBox.critical(
+        show_message(
             None,
             "WinYandexMusicRPC",
-            "Не удалось запустить приложение. Подробности в %LOCALAPPDATA%/WinYandexMusicRPC/rpc.log.",
+            tr("app.start_failed"),
+            QMessageBox.Icon.Critical,
         )
         return 1
     finally:
@@ -118,6 +122,7 @@ def _run() -> int:
 
 
 def main() -> int:
+    set_language(system_language())
     try:
         return _run()
     except Exception as error:
@@ -133,9 +138,8 @@ def main() -> int:
 
             ctypes.windll.user32.MessageBoxW(
                 None,
-                f"Не удалось запустить WinYandexMusicRPC.\n\n{error}\n\n"
-                "Подробности: %LOCALAPPDATA%/WinYandexMusicRPC/rpc.log",
-                "Ошибка запуска",
+                tr("app.bootstrap_failed", error=error),
+                tr("app.start_error"),
                 0x10,
             )
         return 1

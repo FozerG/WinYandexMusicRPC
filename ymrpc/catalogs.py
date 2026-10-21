@@ -1,6 +1,7 @@
 import gzip
 import json
 import logging
+import re
 import time
 from collections import deque
 from urllib.parse import urlencode
@@ -67,6 +68,14 @@ class ITunesCatalog:
                 cover=row.get("artworkUrl100"),
                 url=row.get("trackViewUrl"),
                 source="iTunes",
+                # Apple adds this release marker; other catalogs need their own metadata.
+                release_type=(
+                    "single"
+                    if re.search(
+                        r"\s+[-–—]\s+single\s*$", row.get("collectionName", ""), re.IGNORECASE
+                    )
+                    else ""
+                ),
             )
             for row in rows
             if row.get("kind") == "song"

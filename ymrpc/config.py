@@ -6,6 +6,7 @@ from pathlib import Path
 from threading import RLock
 
 from .constants import APP_NAME
+from .i18n import system_language
 from .models import ActivityType, Buttons, CaptureMode, DisplayFormat, Language, Settings
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,14 @@ class ConfigStore:
             logger.warning("Cannot read settings; using defaults")
             self._parser = configparser.ConfigParser(interpolation=None)
         self._settings = self._load()
+        if (
+            self._parser.get("UserSettings", "app_language", fallback="")
+            not in Language.__members__
+        ):
+            try:
+                self.save(self._settings)
+            except OSError:
+                logger.warning("Cannot persist the initial application language", exc_info=True)
 
     @property
     def settings(self) -> Settings:
@@ -49,6 +58,7 @@ class ConfigStore:
         except ValueError:
             timeout = 300
         return Settings(
+            app_language=enum_value("app_language", Language, system_language()),
             capture_mode=enum_value("capture_mode", CaptureMode, CaptureMode.WINDOWS),
             fix_ynison_pause=str(section.get("fix_ynison_pause", "False")).lower() == "true",
             activity_type=enum_value("activity_type", ActivityType, ActivityType.LISTENING),
@@ -78,6 +88,7 @@ class ConfigStore:
                     "activity_type": settings.activity_type.name,
                     "buttons_settings": settings.buttons.name,
                     "language": settings.language.name,
+                    "app_language": settings.app_language.name,
                     "display_format": settings.display_format.name,
                     "pause_timeout": str(settings.pause_timeout),
                     "show_unknown_media": str(settings.show_unknown_media),

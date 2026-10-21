@@ -52,6 +52,7 @@ class Settings:
     pause_timeout: int = 300
     show_unknown_media: bool = False
     selected_session: str = "Automatic"
+    app_language: Language = Language.ENGLISH
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,8 @@ class Track:
     app_url: str | None = None
     source: str = ""
     version: str = ""
+    release_type: str = ""
+    album_track_count: int | None = None
 
     @property
     def full_title(self) -> str:

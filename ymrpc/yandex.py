@@ -27,6 +27,8 @@ def track_metadata(track) -> Track:
         url=f"https://music.yandex.ru/{path}",
         app_url=f"yandexmusic://{path}",
         source="Yandex",
+        release_type=(albums[0].type or "") if albums else "",
+        album_track_count=albums[0].track_count if albums else None,
     )
 
 

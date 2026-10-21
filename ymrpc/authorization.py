@@ -7,6 +7,8 @@ from pathlib import Path
 from PyQt6.QtCore import QObject, QProcess, QTimer, pyqtSignal
 from PyQt6.QtNetwork import QLocalServer
 
+from .i18n import tr
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,7 @@ class AuthorizationProcess(QObject):
     def start(self):
         channel = f"WinYandexMusicRPC-auth-{uuid.uuid4().hex}"
         if not self.server.listen(channel):
-            self.failed.emit("Не удалось открыть локальный канал авторизации.")
+            self.failed.emit(tr("auth.channel_failed"))
             self.finished.emit()
             return
         arguments = ["--authorize-channel", channel]
@@ -76,7 +78,7 @@ class AuthorizationProcess(QObject):
 
     def _error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
-            self.failed.emit("Не удалось запустить окно входа в Яндекс.")
+            self.failed.emit(tr("auth.start_failed"))
             self.server.close()
             self.finished.emit()
 
@@ -90,9 +92,7 @@ class AuthorizationProcess(QObject):
             and not self._received
             and (code != 0 or status == QProcess.ExitStatus.CrashExit)
         ):
-            self.failed.emit(
-                "Окно Яндекса аварийно закрылось. Основная программа продолжает работать."
-            )
+            self.failed.emit(tr("auth.crashed"))
         self.finished.emit()
 
     def close(self):

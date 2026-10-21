@@ -9,6 +9,7 @@ from yandex_music import Client
 
 from .config import ConfigStore
 from .discord import DiscordConnection
+from .i18n import message
 from .media import WindowsMediaSource
 from .models import CaptureMode, Track
 from .presence import PlaybackState, PresenceGrace, build_payload, client_id
@@ -22,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 class PresenceWorker(QThread):
     sessions_changed = pyqtSignal(tuple)
-    status_changed = pyqtSignal(str)
-    account_changed = pyqtSignal(str)
-    authentication_finished = pyqtSignal(bool, str)
-    update_checked = pyqtSignal(str)
+    status_changed = pyqtSignal(object)
+    account_changed = pyqtSignal(object)
+    authentication_finished = pyqtSignal(bool, object)
+    update_checked = pyqtSignal(object)
     track_changed = pyqtSignal(object)
 
     def __init__(self, config: ConfigStore, parent=None):
@@ -156,10 +157,12 @@ class PresenceWorker(QThread):
                             confirmed = (media.identity, result)
                         elif not settings.show_unknown_media:
                             reason = {
-                                "searching": "идёт проверка трека",
-                                "unavailable": "не удалось проверить трек",
-                            }.get(result.state, "трек не найден в каталогах")
-                            ignored_info = f"Пропущено: {media.source} — {reason}"
+                                "searching": message("verification.searching"),
+                                "unavailable": message("verification.unavailable"),
+                            }.get(result.state, message("verification.not_found"))
+                            ignored_info = message(
+                                "verification.skipped", source=media.source, reason=reason
+                            )
                             ignored_key = (media.identity, result.state)
                             if ignored_key != last_ignored:
                                 logger.info(
@@ -184,7 +187,7 @@ class PresenceWorker(QThread):
                         source_states = result.sources
                     last_ignored = ignored_key
                     visible = playback.visible(media, settings.pause_timeout, time.monotonic())
-                    status = "Ожидание воспроизведения"
+                    status = message("status.waiting")
                     if media is not None and visible:
                         # Search may outlive a track when the user skips several songs.
                         current = media_loop.run_until_complete(source.read(verification_session))
@@ -206,15 +209,17 @@ class PresenceWorker(QThread):
                                 )
                                 payload = build_payload(media, displayed, settings, time.time())
                                 status = (
-                                    "Статус активен" if track else "Статус: непроверенное медиа"
+                                    message("status.active")
+                                    if track
+                                    else message("status.unverified")
                                 )
                             else:
                                 status = {
-                                    "searching": "Проверяем трек в каталогах…",
-                                    "unavailable": "Статус скрыт: не удалось проверить трек",
-                                }.get(search_state, "Статус скрыт: трек не найден")
+                                    "searching": message("status.searching"),
+                                    "unavailable": message("status.unavailable"),
+                                }.get(search_state, message("status.not_found"))
                     elif media is not None:
-                        status = "Статус скрыт после паузы"
+                        status = message("status.paused")
                     if self._stop.is_set():
                         break
                     if settings != self.config.settings:
@@ -228,7 +233,7 @@ class PresenceWorker(QThread):
                         continue
                     delivered = discord.publish(client_id(settings), payload)
                     if delivered is False and payload is not None:
-                        status = "Discord недоступен; ожидаем подключения"
+                        status = message("status.discord_unavailable")
                     if status != last_status:
                         logger.info(
                             "Presence: requested=%s; delivered=%s; search=%s; source=%s",
@@ -255,7 +260,7 @@ class PresenceWorker(QThread):
                         continue
                     playback.visible(None, settings.pause_timeout, time.monotonic())
                     discord.publish(client_id(settings), None)
-                    self.status_changed.emit("Медиасессия недоступна; повторное подключение…")
+                    self.status_changed.emit(message("status.media_unavailable"))
                     self.track_changed.emit((None, None, "unavailable"))
                 finally:
                     if source.session_ids != session_ids:
@@ -281,14 +286,14 @@ class PresenceWorker(QThread):
             return
         delivered = discord.publish(client_id(settings), payload)
         status = {
-            "auth_required": "Ynison: войдите в аккаунт Яндекс",
-            "connecting": "Подключаемся к Ynison…",
-            "unavailable": "Ynison недоступен; повторное подключение…",
-            "unsupported": "Ynison: этот тип медиа не поддерживается",
-            "idle": "Ynison: ожидание воспроизведения",
-        }.get(result.state, "Статус активен" if visible else "Статус скрыт после паузы")
+            "auth_required": message("status.ynison_auth"),
+            "connecting": message("status.ynison_connecting"),
+            "unavailable": message("status.ynison_unavailable"),
+            "unsupported": message("status.ynison_unsupported"),
+            "idle": message("status.ynison_idle"),
+        }.get(result.state, message("status.active") if visible else message("status.paused"))
         if delivered is False and payload is not None:
-            status = "Discord недоступен; ожидаем подключения"
+            status = message("status.discord_unavailable")
         self.status_changed.emit(status)
         self.track_changed.emit(
             (
@@ -313,12 +318,14 @@ class PresenceWorker(QThread):
                 client = Client(token=token)
                 resolver.set_client(client)
                 client.init(timeout=5)
-                self.account_changed.emit(client.me.account.display_name or "Аккаунт Яндекса")
+                self.account_changed.emit(
+                    client.me.account.display_name or message("account.fallback")
+                )
         except Exception as error:
             logger.warning(
                 "Account details unavailable (%s); continuing media polling", type(error).__name__
             )
-            self.status_changed.emit("Не удалось войти; проверьте подключение или войдите снова")
+            self.status_changed.emit(message("account.connection_failed"))
 
     def _process_commands(self, tokens: TokenStore, resolver: TrackResolver) -> None:
         while not self._stop.is_set():
@@ -331,31 +338,33 @@ class PresenceWorker(QThread):
                     client = tokens.validate_and_save(token)
                     self._ynison_token = token
                     resolver.set_client(client)
-                    self.account_changed.emit(client.me.account.display_name or "Аккаунт Яндекса")
-                    self.authentication_finished.emit(True, "Вход выполнен")
+                    self.account_changed.emit(
+                        client.me.account.display_name or message("account.fallback")
+                    )
+                    self.authentication_finished.emit(True, message("account.signed_in"))
                 elif action == "logout":
                     tokens.delete()
                     self._ynison_token = None
                     resolver.set_client(None)
-                    self.account_changed.emit("Без авторизации")
-                    self.authentication_finished.emit(True, "Вы вышли из аккаунта")
+                    self.account_changed.emit(None)
+                    self.authentication_finished.emit(True, message("account.logged_out"))
                 elif action in ("check_updates", "startup_updates"):
                     try:
                         url = latest_release()
                         logger.info("Update check: %s", url or "already up to date")
-                        message = (
-                            f"Доступно обновление: {url}" if url else "Новая версия не найдена"
+                        notification = (
+                            message("updates.available", url=url)
+                            if url
+                            else message("updates.current")
                         )
                     except (OSError, ValueError, KeyError):
                         logger.warning("Update check unavailable")
                         if action == "startup_updates":
                             continue
-                        message = "Не удалось проверить обновления. Повторите позже."
+                        notification = message("updates.failed")
                     if action == "startup_updates" and not url:
                         continue
-                    self.update_checked.emit(message)
+                    self.update_checked.emit(notification)
             except Exception as error:
                 logger.warning("Account operation failed (%s)", type(error).__name__)
-                self.authentication_finished.emit(
-                    False, "Не удалось обновить аккаунт. Проверьте сеть и повторите вход."
-                )
+                self.authentication_finished.emit(False, message("account.failed"))
