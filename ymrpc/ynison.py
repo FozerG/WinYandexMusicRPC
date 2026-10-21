@@ -153,14 +153,7 @@ async def correct_pause(snapshot: YnisonSnapshot, windows) -> YnisonSnapshot:
     if not snapshot.media or not snapshot.track or snapshot.media.status != PlaybackStatus.PAUSED:
         return snapshot
     try:
-        current = await windows.read("Automatic")
-        candidates = [current] if current else []
-        for session in windows.session_ids:
-            if current and session == current.source:
-                continue
-            media = await windows.read(session)
-            if media:
-                candidates.append(media)
+        candidates = await windows.read_all(timeout=2)
         track = replace(snapshot.track, duration=snapshot.track.duration or snapshot.media.duration)
         for media in candidates:
             if media.status != PlaybackStatus.PLAYING or media.duration <= 0 or track.duration <= 0:

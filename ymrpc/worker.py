@@ -99,12 +99,7 @@ class PresenceWorker(QThread):
                     if settings.capture_mode == CaptureMode.YNISON:
                         result = media_loop.run_until_complete(ynison.read(self._ynison_token))
                         if settings.fix_ynison_pause:
-                            try:
-                                result = media_loop.run_until_complete(
-                                    asyncio.wait_for(correct_pause(result, source), timeout=2)
-                                )
-                            except TimeoutError:
-                                logger.debug("Ynison pause correction timed out")
+                            result = media_loop.run_until_complete(correct_pause(result, source))
                         corrected = result.media.identity if result.pause_corrected else None
                         if corrected and corrected != last_corrected:
                             logger.info(
@@ -268,6 +263,7 @@ class PresenceWorker(QThread):
                         self.sessions_changed.emit(session_ids)
                 self._wake.wait(1)
         finally:
+            media_loop.run_until_complete(source.close())
             media_loop.run_until_complete(ynison.close())
             discord.close()
             resolver.close()
