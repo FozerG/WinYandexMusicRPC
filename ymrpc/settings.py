@@ -32,6 +32,7 @@ from .models import (
     Settings,
 )
 from .presence import status_name
+from .search import UNUSED_SOURCES
 from .theme import STYLE
 from .widgets import CoverArt, Dropdown, ToggleSwitch
 
@@ -81,7 +82,10 @@ class SettingsDialog(QDialog):
             settings.display_format,
         )
         self.capture_mode = self._combo(
-            [("Windows.Media.Control", CaptureMode.WINDOWS), ("Yandex Ynison", CaptureMode.YNISON)],
+            [
+                ("Windows.Media.Control", CaptureMode.WINDOWS),
+                ("Ynison (Яндекс Музыка)", CaptureMode.YNISON),
+            ],
             settings.capture_mode,
         )
         self.session = Dropdown()
@@ -120,7 +124,7 @@ class SettingsDialog(QDialog):
         left = QVBoxLayout(sidebar)
         left.setContentsMargins(18, 28, 18, 22)
         left.addWidget(self._label("WinYandexMusicRPC", "brand"))
-        left.addWidget(self._label("Сделано с любовью ❤️", "muted"))
+        left.addWidget(self._label("Сделано с любовью ❤️", "tagline"))
         left.addSpacing(30)
         self.navigation = QListWidget()
         self.navigation.addItems(["Обзор", "Активность", "Захват медиа", "Приложение"])
@@ -215,16 +219,15 @@ class SettingsDialog(QDialog):
         overview.addWidget(card)
         overview.addSpacing(8)
         self.search_heading = self._label("Информация о поиске", "brand")
-        self.search_description = self._label("3 источника", "muted")
+        self.search_description = self._label(
+            "Источники для проверки трека и получения обложки.", "muted"
+        )
         overview.addWidget(self.search_heading)
         overview.addWidget(self.search_description)
         self.source_labels = {}
         self.source_rows = {}
-        for source, label in (
-            ("Yandex", "Яндекс Музыка"),
-            ("iTunes", "iTunes"),
-            ("Deezer", "Deezer"),
-        ):
+        for source, _ in UNUSED_SOURCES:
+            label = "Яндекс Музыка" if source == "Yandex" else source
             row = QHBoxLayout()
             row.addWidget(self._label(label), 1)
             status = self._label("—  Не использовался", "muted")
@@ -241,22 +244,45 @@ class SettingsDialog(QDialog):
         self._row(
             activity,
             "Тип активности",
-            "Играет — может отображаться выше других игр\n"
-            "Слушает — отображается под играми",
+            "Играет — может отображаться выше других игр\nСлушает — отображается под играми",
             self.activity_type,
         )
-        self._row(activity, "Название статуса", "Яндекс Музыка, артист или трек", self.display)
-        self._row(activity, "Язык статуса", "Подписи и кнопки в Discord", self.language)
-        self._row(activity, "Ссылки на трек", "Кнопки доступного каталога", self.buttons)
-        self._row(activity, "Отключение после паузы", "0 — скрывать сразу", self.pause_timeout)
+        self._row(
+            activity,
+            "Название статуса",
+            "Что показывать после «Слушает» или «Играет».",
+            self.display,
+        )
+        self._row(activity, "Язык статуса", "Язык подписей и кнопок.", self.language)
+        self._row(
+            activity,
+            "Ссылки на трек",
+            "Какие кнопки добавлять в статус. Доступность зависит от источника.",
+            self.buttons,
+        )
+        self._row(
+            activity,
+            "Отключение после паузы",
+            "Через сколько скрывать статус на паузе.",
+            self.pause_timeout,
+            divider=False,
+        )
         activity.addWidget(self.never_hide)
         activity.addStretch()
 
-        capture = self._page("Захват медиа", "Выберите плеер и правила публикации.")
-        self._row(capture, "Режим захвата", "Источник текущего воспроизведения", self.capture_mode)
+        capture = self._page(
+            "Захват медиа", "Настройки определения трека и его отображения в Discord."
+        )
+        self._row(
+            capture,
+            "Режим захвата",
+            "Откуда получать информацию о текущем треке.",
+            self.capture_mode,
+            divider=False,
+        )
         self.ynison_warning = self._label(
-            "Ynison получает состояние вашего аккаунта с серверов Яндекса, а не из медиасессий "
-            "компьютера. В статусе может отображаться музыка с телефона или другого устройства. "
+            "Ynison получает состояние вашего аккаунта с серверов Яндекса. "
+            "В статусе может отображаться музыка с телефона или другого устройства. "
             "Также поддерживаются подкасты и ваши загруженные треки в Яндекс Музыке. "
             "Режим экспериментальный: иногда сервер сообщает о паузе во время воспроизведения; "
             "на телефонах обычно работает стабильнее. Требуется вход в аккаунт Яндекс.",
@@ -266,11 +292,11 @@ class SettingsDialog(QDialog):
         self.windows_description = self._label(
             "Windows.Media.Control получает название трека, исполнителя и состояние плеера "
             "из Windows. Можно слушать музыку в VK, Spotify, Apple Music и других приложениях "
-            "или браузерах, которые передают эти данные Windows. Найденные в каталогах треки "
-            "появляются в статусе Discord.",
+            "или браузерах, которые передают эти данные Windows.",
             "warning",
         )
         capture.addWidget(self.windows_description)
+        self._divider(capture)
         self.ynison_controls = QWidget()
         fix_layout = QHBoxLayout(self.ynison_controls)
         fix_layout.setContentsMargins(0, 0, 0, 0)
@@ -291,7 +317,9 @@ class SettingsDialog(QDialog):
         windows_layout = QVBoxLayout(self.windows_controls)
         windows_layout.setContentsMargins(0, 0, 0, 0)
         windows_layout.setSpacing(12)
-        self._row(windows_layout, "Приложение", "Активные медиасессии Windows", self.session)
+        self._row(
+            windows_layout, "Приложение", "Из какого процесса брать текущий трек.", self.session
+        )
         windows_layout.addWidget(self.show_unknown)
         windows_layout.addWidget(self.warning)
         capture.addWidget(self.windows_controls)
@@ -300,16 +328,27 @@ class SettingsDialog(QDialog):
         capture.addStretch()
 
         application = self._page("Приложение", "Запуск, обновления и диагностика.")
-        application.addWidget(self.autostart)
-        application.addSpacing(25)
+        autostart_row = QHBoxLayout()
+        autostart_row.setContentsMargins(0, 12, 0, 12)
+        autostart_row.addWidget(self.autostart)
+        application.addLayout(autostart_row)
+        self._divider(application)
         self.update_button = QPushButton("Проверить обновления")
         self.update_button.clicked.connect(self.updates_requested)
         self._row(
-            application, "Обновления", "При запуске сообщим о новой версии", self.update_button
+            application,
+            "Обновления",
+            "Проверить вручную, доступна ли новая версия программы.",
+            self.update_button,
         )
         logs = QPushButton("Открыть журнал")
         logs.clicked.connect(self.logs_requested)
-        self._row(application, "Журнал работы", "Только текущий и предыдущий запуск", logs)
+        self._row(
+            application,
+            "Журнал работы",
+            "Помогает разобраться в ошибках. Хранятся два последних запуска.",
+            logs,
+        )
         application.addStretch()
 
         footer = QHBoxLayout()
@@ -370,11 +409,8 @@ class SettingsDialog(QDialog):
             "статус «На паузе», хотя музыка играет. Эта проблема встречается давно; на телефонах "
             "статус обычно передаётся корректно.\n\n"
             "Переключатель позволяет сверять трек с медиасессиями этого компьютера через "
-            "Windows.Media.Control. Если совпадают название, исполнитель и длительность и "
-            "локальный плеер воспроизводит трек, программа исправляет паузу и использует его "
-            "текущую позицию. Для треков без исполнителя нужны точное совпадение названия и "
-            "разница длительности не больше двух секунд. Без подходящей локальной сессии "
-            "сохраняются данные Ynison.",
+            "Windows.Media.Control. Если тот же трек играет на компьютере, статус паузы "
+            "и позиция воспроизведения берутся из плеера.",
         )
 
     @staticmethod
@@ -401,9 +437,9 @@ class SettingsDialog(QDialog):
         self.pages.addWidget(scroll)
         return layout
 
-    def _row(self, layout, title, description, control):
+    def _row(self, layout, title, description, control, *, divider=True):
         row = QHBoxLayout()
-        row.setContentsMargins(0, 12, 0, 12)
+        row.setContentsMargins(0, 12, 0, 12 if divider else 0)
         labels = QVBoxLayout()
         labels.addWidget(self._label(title))
         labels.addWidget(self._label(description, "muted"))
@@ -411,9 +447,14 @@ class SettingsDialog(QDialog):
         row.addSpacing(15)
         row.addWidget(control)
         layout.addLayout(row)
-        divider = QFrame(objectName="divider")
-        divider.setFixedHeight(1)
-        layout.addWidget(divider)
+        if divider:
+            self._divider(layout)
+
+    @staticmethod
+    def _divider(layout):
+        line = QFrame(objectName="divider")
+        line.setFixedHeight(1)
+        layout.addWidget(line)
 
     @staticmethod
     def _combo(items, selected):
@@ -463,7 +504,11 @@ class SettingsDialog(QDialog):
         capture_info = value[5] if len(value) > 5 else {}
         self._update_capture_notice(capture_info.get("auth_required"))
         device = capture_info.get("device") or "Ожидание данных об устройстве"
-        description = f"Устройство: {device}" if ynison else "3 источника"
+        description = (
+            f"Устройство: {device}"
+            if ynison
+            else "Источники для проверки трека и получения обложки."
+        )
         if ynison and capture_info.get("pause_corrected"):
             description += "\nПауза успешно исправлена через Windows.Media.Control"
         self.search_description.setText(description)

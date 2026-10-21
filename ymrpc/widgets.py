@@ -184,9 +184,18 @@ class DropdownPopup(QFrame):
 class Dropdown(QComboBox):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self._popup = DropdownPopup(self)
 
+    def wheelEvent(self, event):
+        # Let the surrounding page scroll without changing the selected setting.
+        event.ignore()
+
     def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton:
+            event.ignore()
+            return
+        self.clearFocus()
         if event.button() == Qt.MouseButton.LeftButton and self._popup.isVisible():
             self.hidePopup()
             event.accept()

@@ -5,13 +5,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from threading import Event
 
-from .catalogs import DeezerCatalog, ITunesCatalog
+from .catalogs import DeezerCatalog, ITunesCatalog, SpotifyCatalog
 from .matching import choose, compare
 from .models import MediaSnapshot, Track
 from .yandex import YandexCatalog
 
 logger = logging.getLogger(__name__)
-UNUSED_SOURCES = (("Yandex", "unused"), ("iTunes", "unused"), ("Deezer", "unused"))
+CATALOGS = (YandexCatalog, ITunesCatalog, DeezerCatalog, SpotifyCatalog)
+UNUSED_SOURCES = tuple((catalog.name, "unused") for catalog in CATALOGS)
 
 
 @dataclass(frozen=True)
@@ -26,11 +27,7 @@ class TrackResolver:
         self.providers = (
             providers
             if providers is not None
-            else [
-                YandexCatalog(),
-                ITunesCatalog(),
-                DeezerCatalog(),
-            ]
+            else [catalog() for catalog in CATALOGS]
         )
         self._clock = clock
         self._cache = OrderedDict()

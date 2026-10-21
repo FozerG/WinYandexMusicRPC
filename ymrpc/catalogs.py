@@ -6,7 +6,6 @@ from collections import deque
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from .matching import choose, normalize
 from .models import MediaSnapshot, Track
 
 logger = logging.getLogger(__name__)
@@ -86,50 +85,7 @@ class ITunesCatalog:
                 "limit": 25,
             },
         ).get("results", [])
-        tracks = self._tracks(rows)
-        if choose(media, tracks) or cancelled():
-            return tracks
-        logger.info("iTunes fallback: artist=%r; discovering albums", media.artist)
-        rows = self.http.get(
-            "https://itunes.apple.com/search",
-            {
-                "term": media.artist,
-                "media": "music",
-                "entity": "song",
-                "attribute": "artistTerm",
-                "country": "us",
-                "limit": 200,
-            },
-        ).get("results", [])
-        tracks.extend(self._tracks(rows))
-        if choose(media, tracks):
-            return tracks
-        rows.sort(
-            key=lambda row: normalize(row.get("collectionName", "")) != normalize(media.album)
-        )
-        album_ids = dict.fromkeys(
-            row["collectionId"]
-            for row in rows
-            if row.get("collectionId")
-            and normalize(row.get("artistName", "")) == normalize(media.artist)
-        )
-        for album_id in list(album_ids)[:4]:
-            if cancelled():
-                break
-            logger.info("iTunes album lookup: id=%s country=US", album_id)
-            rows = self.http.get(
-                "https://itunes.apple.com/lookup",
-                {
-                    "id": album_id,
-                    "entity": "song",
-                    "country": "us",
-                    "limit": 200,
-                },
-            ).get("results", [])
-            tracks.extend(self._tracks(rows))
-            if choose(media, tracks):
-                break
-        return tracks
+        return self._tracks(rows)
 
 
 class DeezerCatalog:
@@ -156,3 +112,39 @@ class DeezerCatalog:
             )
             for row in rows
         ]
+
+
+class SpotifyCatalog:
+    name = "Spotify"
+
+    def search(self, media: MediaSnapshot, cancelled=lambda: False) -> list[Track]:
+        if cancelled():
+            return []
+        # Import and open the client only when the preceding catalogs did not match.
+        from spotify_scraper import RetryPolicy, SpotifyClient
+
+        query = f"{media.artist} {media.title}"
+        logger.info("Spotify search: query=%r", query)
+        # TrackResolver owns caching and backoff; avoid nested retries and close all sockets.
+        with SpotifyClient(timeout=4, retry=RetryPolicy(max_attempts=1)) as client:
+            result = client.search(query, types=("track",), limit=25)
+        if cancelled():
+            return []
+        tracks = []
+        for row in result.tracks:
+            if not row.id or not row.name or not row.artists:
+                continue
+            cover = max(row.images, key=lambda image: image.width or 0, default=None)
+            tracks.append(
+                Track(
+                    title=row.name,
+                    artist=", ".join(artist.name for artist in row.artists),
+                    album=row.album.name if row.album else "",
+                    duration=row.duration_ms / 1000,
+                    cover=cover.url if cover else None,
+                    url=row.url,
+                    app_url=row.uri,
+                    source=self.name,
+                )
+            )
+        return tracks

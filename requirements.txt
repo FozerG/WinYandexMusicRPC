@@ -1,6 +1,7 @@
 PyQt6==6.11.0
 PyQt6-WebEngine==6.11.0
 pypresence==4.6.2
+spotifyscraper==3.9.2
 yandex-music[ynison] @ git+https://github.com/MarshalX/yandex-music-api.git@0fa54f2d32084a9e461bce41890d1c9ab70d91aa
 keyring>=25.6,<26
 packaging>=24,<27
