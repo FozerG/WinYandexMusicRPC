@@ -16,6 +16,7 @@ from .presence import PlaybackState, PresenceGrace, build_payload, client_id
 from .search import UNUSED_SOURCES, TrackResolver
 from .tokens import TokenStore
 from .version_check import latest_release
+from .yandex import account_avatar
 from .ynison import YnisonSource, correct_pause
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,8 @@ logger = logging.getLogger(__name__)
 class PresenceWorker(QThread):
     sessions_changed = pyqtSignal(tuple)
     status_changed = pyqtSignal(object)
-    account_changed = pyqtSignal(object)
+    account_changed = pyqtSignal(object, str)
+    discord_profile_changed = pyqtSignal(object)
     authentication_finished = pyqtSignal(bool, object)
     update_checked = pyqtSignal(object)
     track_changed = pyqtSignal(object)
@@ -64,7 +66,7 @@ class PresenceWorker(QThread):
         source = WindowsMediaSource()
         ynison = YnisonSource()
         resolver = TrackResolver()
-        discord = DiscordConnection()
+        discord = DiscordConnection(profile_changed=self.discord_profile_changed.emit)
         playback = PlaybackState()
         grace = PresenceGrace()
         previous_settings = self.config.settings
@@ -315,7 +317,8 @@ class PresenceWorker(QThread):
                 resolver.set_client(client)
                 client.init(timeout=5)
                 self.account_changed.emit(
-                    client.me.account.display_name or message("account.fallback")
+                    client.me.account.display_name or message("account.fallback"),
+                    account_avatar(token),
                 )
         except Exception as error:
             logger.warning(
@@ -335,14 +338,15 @@ class PresenceWorker(QThread):
                     self._ynison_token = token
                     resolver.set_client(client)
                     self.account_changed.emit(
-                        client.me.account.display_name or message("account.fallback")
+                        client.me.account.display_name or message("account.fallback"),
+                        account_avatar(token),
                     )
                     self.authentication_finished.emit(True, message("account.signed_in"))
                 elif action == "logout":
                     tokens.delete()
                     self._ynison_token = None
                     resolver.set_client(None)
-                    self.account_changed.emit(None)
+                    self.account_changed.emit(None, "")
                     self.authentication_finished.emit(True, message("account.logged_out"))
                 elif action in ("check_updates", "startup_updates"):
                     try:

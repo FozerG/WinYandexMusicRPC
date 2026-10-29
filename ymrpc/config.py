@@ -57,6 +57,14 @@ class ConfigStore:
                 timeout = 300
         except ValueError:
             timeout = 300
+        try:
+            last_timeout = int(section.get("last_pause_timeout", str(max(0, timeout))))
+            if timeout == -1 and "last_pause_timeout" not in section:
+                last_timeout = 300
+            if not 0 <= last_timeout <= 86400:
+                last_timeout = 300
+        except ValueError:
+            last_timeout = 300
         return Settings(
             app_language=enum_value("app_language", Language, system_language()),
             capture_mode=enum_value("capture_mode", CaptureMode, CaptureMode.WINDOWS),
@@ -66,6 +74,7 @@ class ConfigStore:
             language=enum_value("language", Language, Language.RUSSIAN),
             display_format=enum_value("display_format", DisplayFormat, DisplayFormat.ARTIST_TRACK),
             pause_timeout=timeout,
+            last_pause_timeout=last_timeout,
             show_unknown_media=str(section.get("show_unknown_media", "False")).lower() == "true",
             selected_session=section.get("selected_session", "Automatic") or "Automatic",
         )
@@ -73,6 +82,8 @@ class ConfigStore:
     def save(self, settings: Settings) -> None:
         if type(settings.pause_timeout) is not int or not -1 <= settings.pause_timeout <= 86400:
             raise ValueError("Pause timeout must be between -1 and 86400 seconds")
+        if type(settings.last_pause_timeout) is not int or not 0 <= settings.last_pause_timeout <= 86400:
+            raise ValueError("Remembered pause timeout must be between 0 and 86400 seconds")
         with self._lock:
             parser = configparser.ConfigParser(interpolation=None)
             parser.read_dict(
@@ -81,6 +92,7 @@ class ConfigStore:
             if not parser.has_section("UserSettings"):
                 parser.add_section("UserSettings")
             parser.remove_option("UserSettings", "strong_find")
+            parser.remove_option("UserSettings", "interface_font")
             parser["UserSettings"].update(
                 {
                     "capture_mode": settings.capture_mode.name,
@@ -91,6 +103,7 @@ class ConfigStore:
                     "app_language": settings.app_language.name,
                     "display_format": settings.display_format.name,
                     "pause_timeout": str(settings.pause_timeout),
+                    "last_pause_timeout": str(settings.last_pause_timeout),
                     "show_unknown_media": str(settings.show_unknown_media),
                     "selected_session": settings.selected_session,
                 }

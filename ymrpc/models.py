@@ -50,6 +50,7 @@ class Settings:
     language: Language = Language.RUSSIAN
     display_format: DisplayFormat = DisplayFormat.ARTIST_TRACK
     pause_timeout: int = 300
+    last_pause_timeout: int = 300
     show_unknown_media: bool = False
     selected_session: str = "Automatic"
     app_language: Language = Language.ENGLISH

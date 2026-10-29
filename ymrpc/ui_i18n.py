@@ -1,7 +1,7 @@
 """Small Qt bindings for translating existing widgets without recreating them."""
 
 from PyQt6.QtCore import QObject, Qt
-from PyQt6.QtWidgets import QComboBox, QListWidget, QMessageBox
+from PyQt6.QtWidgets import QComboBox, QListWidget
 
 from .i18n import tr
 
@@ -38,8 +38,7 @@ def retranslate(root: QObject) -> None:
                     item.setText(tr(key))
 
 
-def show_message(parent, title: str, text: str, icon=QMessageBox.Icon.Information):
-    """Translate our own dialog button independently of Qt's installed locale."""
-    dialog = QMessageBox(icon, title, text, parent=parent)
-    dialog.addButton(tr("common.ok"), QMessageBox.ButtonRole.AcceptRole)
-    return dialog.exec()
+def show_message(parent, title: str, text: str):
+    from .dialogs import MessageDialog
+
+    return MessageDialog(parent, title, text).exec()

@@ -5,9 +5,7 @@ import winreg
 from pathlib import Path
 
 import win32api
-import win32con
 import win32event
-import win32gui
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "YaMusicRPC"
@@ -62,11 +60,3 @@ def set_autostart(enabled: bool) -> None:
                 winreg.DeleteValue(key, RUN_NAME)
         except FileNotFoundError:
             pass
-
-
-def hide_console() -> None:
-    import win32console
-
-    handle = win32console.GetConsoleWindow()
-    if handle:
-        win32gui.ShowWindow(handle, win32con.SW_HIDE)

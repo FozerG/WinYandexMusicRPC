@@ -1,15 +1,10 @@
-from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QIcon
 from PyQt6.QtWidgets import (
-    QComboBox,
-    QDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QMessageBox,
     QProgressBar,
-    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSpinBox,
@@ -21,7 +16,8 @@ from PyQt6.QtWidgets import (
 from . import __version__
 from .config import ConfigStore
 from .constants import resource_path
-from .fonts import load_fonts
+from .dialogs import MessageDialog
+from .fonts import application_font, load_fonts
 from .i18n import Message, message, render, set_language, tr
 from .models import (
     ActivityType,
@@ -35,12 +31,24 @@ from .models import (
 )
 from .presence import build_payload
 from .search import UNUSED_SOURCES
-from .theme import STYLE
+from .theme import make_style
 from .ui_i18n import TEXT_ROLE, bind_text, retranslate, show_message
-from .widgets import CoverArt, Dropdown, ToggleSwitch
+from .widgets import (
+    ActionButton,
+    CoverArt,
+    Dropdown,
+    IconButton,
+    IconLabel,
+    NavigationDelegate,
+    NavigationList,
+    RoundedMenu,
+    ToggleSwitch,
+    TrailingButton,
+)
+from .window_frame import RoundedDialog, TitleBar
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(RoundedDialog):
     saved = pyqtSignal()
     login_requested = pyqtSignal()
     logout_requested = pyqtSignal()
@@ -53,15 +61,16 @@ class SettingsDialog(QDialog):
         self.config = config
         set_language(config.settings.app_language)
         self._account = None
+        self._account_avatar = ""
         self._track = (None, None, "idle")
         self._status = message("status.waiting")
         self._logged_in = False
         self.setWindowTitle("WinYandexMusicRPC")
         self.setWindowIcon(QIcon(str(resource_path("YMRPC_ico.ico"))))
         load_fonts()
-        self.resize(860, 610)
-        self.setMinimumSize(860, 610)
-        self.setStyleSheet(STYLE)
+        self.setFixedSize(900, 650)
+        self.setStyleSheet(make_style())
+        self.setFont(application_font())
         settings = config.settings
         self.activity_type = self._combo(
             [
@@ -104,11 +113,6 @@ class SettingsDialog(QDialog):
             settings.capture_mode,
         )
         self.session = Dropdown()
-        self.session.setMinimumWidth(220)
-        self.session.setMaximumWidth(350)
-        self.session.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
         self.update_sessions(sessions)
         self.never_hide = bind_text(ToggleSwitch(), "pause.never_hide")
         self.never_hide.setChecked(settings.pause_timeout == -1)
@@ -116,7 +120,9 @@ class SettingsDialog(QDialog):
         self.pause_timeout.setRange(0, 86400)
         bind_text(self.pause_timeout, "pause.seconds", "setSuffix")
         bind_text(self.pause_timeout, "pause.immediately", "setSpecialValueText")
-        self.pause_timeout.setValue(max(0, settings.pause_timeout))
+        self.pause_timeout.setValue(
+            settings.last_pause_timeout if settings.pause_timeout == -1 else settings.pause_timeout
+        )
         self.pause_timeout.setEnabled(not self.never_hide.isChecked())
         self.never_hide.toggled.connect(lambda checked: self.pause_timeout.setEnabled(not checked))
         self.show_unknown = bind_text(ToggleSwitch(), "capture.unknown")
@@ -127,121 +133,199 @@ class SettingsDialog(QDialog):
         )
         self.warning.setVisible(settings.show_unknown_media)
         self.show_unknown.toggled.connect(self.warning.setVisible)
-        self.autostart = bind_text(ToggleSwitch(), "app.autostart")
+        self.autostart = ToggleSwitch()
+        bind_text(self.autostart, "app.autostart", "setAccessibleName")
         self.autostart.toggled.connect(self.autostart_changed)
 
-        root = QHBoxLayout(self)
+        shell = QVBoxLayout(self)
+        shell.setContentsMargins(1, 1, 1, 1)
+        shell.setSpacing(0)
+        self.title_bar = TitleBar(self)
+        shell.addWidget(self.title_bar)
+        root = QHBoxLayout()
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        shell.addLayout(root, 1)
         sidebar = QFrame(objectName="sidebar")
-        sidebar.setFixedWidth(250)
+        sidebar.setFixedWidth(196)
         left = QVBoxLayout(sidebar)
-        left.setContentsMargins(18, 28, 18, 22)
-        left.addWidget(self._label("WinYandexMusicRPC", "brand"))
-        left.addWidget(self._translated_label("app.tagline", "tagline"))
-        left.addSpacing(30)
-        self.navigation = QListWidget()
+        left.setContentsMargins(14, 8, 10, 22)
+        left.setSpacing(0)
+        self.navigation = NavigationList()
         for key in ("nav.overview", "nav.activity", "nav.capture", "nav.application"):
             self.navigation.addItem(tr(key))
             self.navigation.item(self.navigation.count() - 1).setData(TEXT_ROLE, key)
+        self.navigation.setItemDelegate(NavigationDelegate(self.navigation))
+        self.navigation.setIconSize(QSize(26, 26))
+        self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        for index, icon in enumerate(("home", "activity", "monitor", "settings")):
+            self.navigation.item(index).setIcon(QIcon(str(resource_path(f"{icon}.svg"))))
         left.addWidget(self.navigation, 1)
-        account_card = QFrame(objectName="card")
-        account_layout = QVBoxLayout(account_card)
-        account_layout.setContentsMargins(14, 18, 14, 18)
-        account_layout.setSpacing(16)
-        account_header = QHBoxLayout()
-        account_header.setSpacing(9)
-        yandex_icon = QLabel()
-        yandex_icon.setFixedSize(24, 24)
-        yandex_icon.setPixmap(QIcon(str(resource_path("yandex.svg"))).pixmap(24, 24))
-        account_header.addWidget(yandex_icon)
-        account_header.addWidget(self._translated_label("account.title"), 1)
-        self.account_info = QPushButton(objectName="info")
-        self.account_info.setIcon(QIcon(str(resource_path("info.svg"))))
-        self.account_info.setIconSize(QSize(17, 17))
-        self.account_info.setFixedSize(24, 24)
-        bind_text(self.account_info, "account.why_tooltip", "setToolTip")
-        bind_text(self.account_info, "account.info_accessible", "setAccessibleName")
-        self.account_info.clicked.connect(self._show_account_info)
-        account_header.addWidget(self.account_info)
-        account_layout.addLayout(account_header)
-        self.account_label = self._translated_label("account.signed_out")
-        account_layout.addWidget(self.account_label)
-        self.login = bind_text(QPushButton(), "account.sign_in")
-        self.logout = bind_text(QPushButton(), "account.sign_out")
-        self.login.clicked.connect(self.login_requested)
-        self.logout.clicked.connect(self.logout_requested)
-        self.logout.hide()
-        account_layout.addWidget(self.login)
-        account_layout.addWidget(self.logout)
-        left.addWidget(account_card)
         left.addSpacing(10)
-        left.addWidget(self._label(f"WinYandexMusicRPC  ·  {__version__}", "muted"))
+        left.addWidget(self._label(f"WinYandexMusicRPC  {__version__}", "version"))
         root.addWidget(sidebar)
         right = QVBoxLayout()
-        right.setContentsMargins(24, 24, 24, 20)
-        right.setSpacing(18)
+        right.setContentsMargins(20, 6, 20, 22)
+        right.setSpacing(0)
         self.pages = QStackedWidget()
         right.addWidget(self.pages, 1)
         root.addLayout(right, 1)
 
         overview = self._page("nav.overview", "overview.description")
+        overview.setSpacing(8)
+        overview.itemAt(0).widget().setFixedHeight(72)
         self.capture_notice = self._label("", "warning")
         overview.addWidget(self.capture_notice)
         self._update_capture_notice()
         card = QFrame(objectName="card")
-        now = QVBoxLayout(card)
-        now.setContentsMargins(18, 18, 18, 18)
-        now.setSpacing(8)
+        card.setMinimumHeight(164)
+        track_row = QHBoxLayout(card)
+        track_row.setContentsMargins(18, 18, 18, 18)
+        track_row.setSpacing(16)
         self.playback_heading = self._translated_label("playback.heading", "playbackHeading")
-        now.addWidget(self.playback_heading)
-        now.addSpacing(10)
-        track_row = QHBoxLayout()
-        track_row.setSpacing(14)
-        self.cover = CoverArt()
+        self.playback_heading.hide()
+        self.cover = CoverArt(size=128)
         track_row.addWidget(self.cover)
         track_text = QVBoxLayout()
-        track_text.setSpacing(4)
+        track_text.setSpacing(8)
+        track_text.addStretch()
         self.track_title = self._translated_label("playback.empty", "trackTitle")
-        self.track_artist = self._translated_label("playback.empty_hint", "muted")
+        self.track_artist = self._translated_label("playback.empty_hint", "trackArtist")
         self.track_album = self._label("", "muted")
         self.track_album.hide()
         track_text.addWidget(self.track_title)
         track_text.addWidget(self.track_artist)
-        track_text.addWidget(self.track_album)
-        timeline = QHBoxLayout()
-        timeline.setSpacing(9)
+        track_text.addSpacing(15)
         self.elapsed = self._label("00:00", "timecode")
         self.duration = self._label("—:—", "timecode")
-        self.progress = QProgressBar()
-        self.progress.setObjectName("playbackProgress")
+        self.progress = QProgressBar(objectName="playbackProgress")
         self.progress.setRange(0, 1000)
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
-        self.progress.setFixedHeight(4)
+        self.progress.setFixedHeight(6)
+        track_text.addWidget(self.progress)
+        timeline = QHBoxLayout()
         timeline.addWidget(self.elapsed)
-        timeline.addWidget(self.progress, 1)
+        timeline.addStretch()
         timeline.addWidget(self.duration)
         track_text.addLayout(timeline)
+        track_text.addStretch()
         track_row.addLayout(track_text, 1)
-        now.addLayout(track_row)
-        now.addSpacing(10)
-        self.status_label = self._translated_label("status.waiting")
+        self.track_actions = QWidget()
+        actions = QVBoxLayout(self.track_actions)
+        actions.setContentsMargins(0, 16, 0, 13)
+        self.status_label = self._translated_label("status.waiting", "status")
+        status_row = QHBoxLayout()
+        status_row.setSpacing(10)
+        status_row.addStretch()
+        status_row.addWidget(self.status_label)
+        actions.addLayout(status_row)
+        actions.addStretch()
         self.track_source = self._label("", "muted")
-        self.track_link = self._label("")
-        self.track_link.setOpenExternalLinks(True)
-        now.addWidget(self.status_label)
-        now.addWidget(self.track_source)
-        now.addWidget(self.track_link)
+        self.track_link = bind_text(IconButton(objectName="primary"), "playback.open_track")
+        self.track_link.setIcon(QIcon(str(resource_path("external.svg"))))
+        self.track_link.setIconSize(QSize(21, 21))
+        self.track_link.setMinimumWidth(148)
+        self.track_link.clicked.connect(self._open_track)
+        self.track_link.setEnabled(False)
+        actions.addWidget(self.track_link)
+        track_row.addWidget(self.track_actions)
         overview.addWidget(card)
         overview.addSpacing(8)
-        self.search_heading = self._translated_label("search.heading", "brand")
+        connections_header = QWidget()
+        connections_labels = QVBoxLayout(connections_header)
+        connections_labels.setContentsMargins(0, 5, 0, 7)
+        connections_labels.setSpacing(5)
+        connections_labels.addWidget(self._translated_label("connections.title", "brand"))
+        connections_labels.addWidget(self._translated_label("connections.description", "muted"))
+        overview.addWidget(connections_header)
+        discord_card = QFrame(objectName="card")
+        discord_row = QHBoxLayout(discord_card)
+        discord_row.setContentsMargins(18, 12, 22, 12)
+        discord_row.setSpacing(12)
+        self.discord_avatar = CoverArt(size=52, circular=True, hide_until_loaded=True)
+        discord_icon = self._service_icon("discord.svg", 30)
+        discord_icon.setToolTip("Discord")
+        discord_row.addWidget(discord_icon)
+        discord_row.addWidget(self.discord_avatar)
+        discord_text = QVBoxLayout()
+        discord_text.setSpacing(4)
+        discord_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        discord_text.setContentsMargins(0, 0, 0, 0)
+        self.discord_name = self._label("Discord", "connectionName")
+        self.discord_username = self._translated_label("discord.offline_hint", "profileUsername")
+        discord_text.addWidget(self.discord_name)
+        discord_text.addWidget(self.discord_username)
+        discord_row.addLayout(discord_text, 1)
+        self.discord_state = self._label("", "status")
+        discord_row.addWidget(self.discord_state)
+        overview.addWidget(discord_card)
+        self._discord_profile = {}
+        self.set_discord_profile({"connected": False})
+
+        account_card = QFrame(objectName="card")
+        account_row = QHBoxLayout(account_card)
+        account_row.setContentsMargins(18, 12, 22, 12)
+        account_row.setSpacing(12)
+        account_row.addWidget(self._service_icon("music-mark.svg", 38))
+        self.yandex_avatar = CoverArt(size=52, circular=True, hide_until_loaded=True)
+        account_row.addWidget(self.yandex_avatar)
+        account_text = QVBoxLayout()
+        account_text.setSpacing(4)
+        account_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.account_label = self._translated_label("account.signed_out", "connectionName")
+        account_text.addWidget(self.account_label)
+        account_text.addWidget(self._translated_label("connections.yandex", "muted"))
+        account_row.addLayout(account_text, 1)
+        self.account_manage = bind_text(TrailingButton("right"), "account.manage")
+        account_menu = RoundedMenu(self.account_manage)
+        self.login = bind_text(account_menu.addAction(""), "account.sign_in")
+        self.logout = bind_text(account_menu.addAction(""), "account.sign_out")
+        self.login.triggered.connect(self.login_requested)
+        self.logout.triggered.connect(self.logout_requested)
+        self.logout.setVisible(False)
+        account_menu.addSeparator()
+        self.account_info = bind_text(account_menu.addAction(""), "account.why_tooltip")
+        self.account_info.triggered.connect(self._show_account_info)
+        self.account_manage.setMenu(account_menu)
+        account_row.addWidget(self.account_manage)
+        overview.addWidget(account_card)
+
+        search_card = QFrame(objectName="card")
+        search_layout = QVBoxLayout(search_card)
+        search_layout.setContentsMargins(18, 12, 18, 12)
+        summary_row = QHBoxLayout()
+        summary_row.setSpacing(16)
+        self.summary_cover = CoverArt(size=52)
+        summary_row.addWidget(self.summary_cover)
+        summary_text = QVBoxLayout()
+        summary_text.setSpacing(4)
+        summary_text.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        self.cover_summary = self._translated_label("cover.waiting", "resultTitle")
+        summary_text.addWidget(self.cover_summary)
+        summary_text.addWidget(self._translated_label("cover.description", "muted"))
+        summary_row.addLayout(summary_text, 1)
+        self.details_button = bind_text(TrailingButton("down"), "common.details")
+        self.details_button.setCheckable(True)
+        summary_row.addWidget(self.details_button)
+        search_layout.addLayout(summary_row)
+        self.search_details = QWidget()
+        details_layout = QVBoxLayout(self.search_details)
+        details_layout.setContentsMargins(0, 12, 0, 0)
+        self.search_heading = self._translated_label("search.heading", "rowTitle")
         self.search_description = self._translated_label("search.description", "muted")
-        overview.addWidget(self.search_heading)
-        overview.addWidget(self.search_description)
+        self.search_description.hide()
+        details_layout.addWidget(self.search_heading)
+        details_layout.addWidget(self.search_description)
+        details_layout.addWidget(self.track_source)
+        details_layout.addSpacing(6)
+        search_layout.addWidget(self.search_details)
+        self.search_details.hide()
+        self.details_button.toggled.connect(self._toggle_details)
+        overview.addWidget(search_card)
         self.ynison_idle_notice = self._translated_label("capture.ynison_outage", "errorNotice")
         self.ynison_idle_notice.hide()
-        overview.addWidget(self.ynison_idle_notice)
+        overview.insertWidget(3, self.ynison_idle_notice)
         self.source_labels = {}
         self.source_rows = {}
         for source, _ in UNUSED_SOURCES:
@@ -256,7 +340,7 @@ class SettingsDialog(QDialog):
             container = QWidget()
             container.setLayout(row)
             row.setContentsMargins(0, 0, 0, 0)
-            overview.addWidget(container)
+            details_layout.addWidget(container)
             self.source_rows[source] = container
         overview.addStretch()
 
@@ -318,7 +402,7 @@ class SettingsDialog(QDialog):
         self.fix_pause.setChecked(settings.fix_ynison_pause)
         fix_layout.addWidget(self.fix_pause)
         fix_layout.addStretch()
-        pause_info = QPushButton(objectName="info")
+        pause_info = ActionButton(objectName="info")
         pause_info.setIcon(QIcon(str(resource_path("info.svg"))))
         pause_info.setIconSize(QSize(17, 17))
         pause_info.setFixedSize(24, 24)
@@ -341,12 +425,11 @@ class SettingsDialog(QDialog):
 
         application = self._page("nav.application", "app.description")
         self._row(application, "app.language", "app.language_hint", self.app_language)
-        autostart_row = QHBoxLayout()
-        autostart_row.setContentsMargins(0, 12, 0, 12)
-        autostart_row.addWidget(self.autostart)
-        application.addLayout(autostart_row)
-        self._divider(application)
-        self.update_button = bind_text(QPushButton(), "updates.check")
+        self._row(application, "app.autostart", "app.autostart_hint", self.autostart)
+        self.update_button = bind_text(ActionButton(), "updates.check")
+        self.update_button.setObjectName("primary")
+        self.update_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        self.update_button.setMinimumWidth(200)
         self.update_button.clicked.connect(self.updates_requested)
         self._row(
             application,
@@ -354,7 +437,10 @@ class SettingsDialog(QDialog):
             "updates.description",
             self.update_button,
         )
-        logs = bind_text(QPushButton(), "logs.open")
+        logs = bind_text(IconButton(), "logs.open")
+        logs.setIcon(QIcon(str(resource_path("document.svg"))))
+        logs.setIconSize(QSize(24, 24))
+        logs.setMinimumWidth(190)
         logs.clicked.connect(self.logs_requested)
         self._row(
             application,
@@ -364,24 +450,10 @@ class SettingsDialog(QDialog):
         )
         application.addStretch()
 
-        footer = QHBoxLayout()
-        footer.setSpacing(14)
-        self.save_status = self._label("", "saved")
-        footer.addWidget(self.save_status, 1)
-        close = bind_text(QPushButton(), "common.close")
-        close.clicked.connect(self.reject)
-        self.save_button = bind_text(QPushButton(objectName="primary"), "common.save")
-        self.save_button.clicked.connect(self._save)
-        self.save_button.hide()
-        self.save_timer = QTimer(self)
-        self.save_timer.setSingleShot(True)
-        self.save_timer.setInterval(3000)
-        self.save_timer.timeout.connect(self.save_status.clear)
-        footer.addWidget(close)
-        footer.addWidget(self.save_button)
-        right.addLayout(footer)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
+        self.navigation.setFocus()
+        self.set_status(self._status)
         for control in (
             self.activity_type,
             self.language,
@@ -391,11 +463,37 @@ class SettingsDialog(QDialog):
             self.session,
             self.capture_mode,
         ):
-            control.currentIndexChanged.connect(self._update_dirty)
-        self.pause_timeout.valueChanged.connect(self._update_dirty)
-        self.show_unknown.toggled.connect(self._update_dirty)
-        self.never_hide.toggled.connect(self._update_dirty)
-        self.fix_pause.toggled.connect(self._update_dirty)
+            control.currentIndexChanged.connect(self._save)
+        self.pause_timeout.valueChanged.connect(self._save)
+        self.show_unknown.toggled.connect(self._save)
+        self.never_hide.toggled.connect(self._save)
+        self.fix_pause.toggled.connect(self._save)
+
+    @staticmethod
+    def _service_icon(filename, size):
+        label = IconLabel(QIcon(str(resource_path(filename))), size, objectName="serviceIcon")
+        label.setFixedSize(52, 52)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        return label
+
+    def _toggle_details(self, expanded):
+        page = self.pages.widget(0)
+        page.setUpdatesEnabled(False)
+        try:
+            self.search_details.setVisible(expanded)
+            # Resolve content height and the scrollbar before painting the expansion.
+            card = self.search_details.parentWidget()
+            card.layout().invalidate()
+            card.layout().activate()
+            card.updateGeometry()
+            page.widget().layout().activate()
+            page.widget().resize(page.viewport().size().expandedTo(page.widget().minimumSizeHint()))
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
+            page.widget().layout().activate()
+            if expanded:
+                page.ensureWidgetVisible(self.search_details, 0, 12)
+        finally:
+            page.setUpdatesEnabled(True)
 
     def _update_capture_mode(self):
         ynison = self.capture_mode.currentData() == CaptureMode.YNISON
@@ -417,11 +515,13 @@ class SettingsDialog(QDialog):
             )
 
     def _show_pause_info(self):
-        show_message(
-            self,
-            tr("capture.pause_title"),
-            tr("capture.pause_help"),
-        )
+        MessageDialog(
+            self, tr("capture.pause_title"), subtitle=tr("capture.pause_subtitle"),
+            sections=(
+                (tr("capture.pause_reason_title"), tr("capture.pause_reason")),
+                (tr("capture.pause_action_title"), tr("capture.pause_action")),
+            ),
+        ).exec()
 
     @staticmethod
     def _label(text, name=""):
@@ -436,32 +536,43 @@ class SettingsDialog(QDialog):
     def _page(self, title, subtitle):
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 18, 16)
-        layout.setSpacing(12)
-        layout.addWidget(self._translated_label(title, "heading"))
-        layout.addWidget(self._translated_label(subtitle, "muted"))
-        layout.addSpacing(10)
+        layout.setContentsMargins(0, 0, 14, 0)
+        layout.setSpacing(10)
+        header = QWidget()
+        header.setFixedHeight(72)
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 9)
+        header_layout.setSpacing(0)
+        title_label = self._translated_label(title, "heading")
+        title_label.setFixedHeight(39)
+        header_layout.addWidget(title_label)
+        header_layout.addWidget(self._translated_label(subtitle, "subtitle"))
+        layout.addWidget(header)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        if title != "nav.overview":
+            layout.setContentsMargins(0, 0, 14, 18)
+            scroll.setViewportMargins(0, 0, 0, 16)
         scroll.setWidget(content)
         self.pages.addWidget(scroll)
         return layout
 
     def _row(self, layout, title, description, control, *, divider=True):
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 12, 0, 12 if divider else 0)
+        card = QFrame(objectName="card")
+        row = QHBoxLayout(card)
+        card.setMinimumHeight(90 if control is self.autostart else 82)
+        row.setContentsMargins(20, 16, 20, 16)
         labels = QVBoxLayout()
-        labels.addWidget(self._translated_label(title))
+        labels.setSpacing(7)
+        labels.addWidget(self._translated_label(title, "rowTitle"))
         labels.addWidget(self._translated_label(description, "muted"))
         row.addLayout(labels, 1)
         row.addSpacing(15)
         row.addWidget(control)
-        layout.addLayout(row)
-        if divider:
-            self._divider(layout)
+        layout.addWidget(card)
 
     @staticmethod
     def _divider(layout):
@@ -472,7 +583,6 @@ class SettingsDialog(QDialog):
     @staticmethod
     def _combo(items, selected):
         combo = Dropdown()
-        combo.setMinimumWidth(220)
         for key, value in items:
             combo.addItem(tr(key), value)
             combo.setItemData(combo.count() - 1, key, TEXT_ROLE)
@@ -493,8 +603,10 @@ class SettingsDialog(QDialog):
         self.session.setCurrentIndex(self.session.findData(selected))
         self.session.blockSignals(False)
 
-    def set_account(self, account: str | Message | None):
+    def set_account(self, account: str | Message | None, avatar_url: str = ""):
         self._account = account
+        self._account_avatar = avatar_url if account is not None else ""
+        self.yandex_avatar.set_url(self._account_avatar)
         self.account_label.setText(
             render(account) if account is not None else tr("account.signed_out")
         )
@@ -502,11 +614,18 @@ class SettingsDialog(QDialog):
         self._logged_in = logged_in
         self._update_capture_notice()
         self.logout.setVisible(logged_in)
-        self.login.setText(tr("account.switch") if logged_in else tr("account.sign_in"))
+        self.login.setVisible(not logged_in)
+        self.login.setText(tr("account.sign_in"))
 
     def set_status(self, status: str | Message):
         self._status = status
-        self.status_label.setText(render(status))
+        self.status_label.setText("●  " + render(status))
+        active = isinstance(status, Message) and status.key in (
+            "status.active",
+            "status.unverified",
+        )
+        color = "#9dd9ad" if active else "#a8a8af"
+        self.status_label.setStyleSheet(f"color: {color};")
 
     def set_auth_busy(self, busy: bool):
         self.login.setEnabled(not busy)
@@ -518,10 +637,13 @@ class SettingsDialog(QDialog):
         self.autostart.blockSignals(False)
 
     def set_track(self, value):
-        from html import escape
-
         self._track = value
         media, track, state = value[:3]
+        self.cover.set_playback(
+            "playing" if media and media.status == PlaybackStatus.PLAYING
+            else "paused" if media and media.status == PlaybackStatus.PAUSED
+            else None
+        )
         ynison = self.config.settings.capture_mode == CaptureMode.YNISON
         self.search_heading.setText(
             tr("playback.source_heading") if ynison else tr("search.heading")
@@ -533,6 +655,7 @@ class SettingsDialog(QDialog):
         if ynison and capture_info.get("pause_corrected"):
             description += tr("playback.pause_corrected")
         self.search_description.setText(description)
+        self.search_description.setVisible(ynison)
         self.ynison_idle_notice.setVisible(ynison and state == "idle")
         source_states = dict(value[3]) if len(value) > 3 else {}
         statuses = {
@@ -548,6 +671,7 @@ class SettingsDialog(QDialog):
             label.setText(text)
             label.setStyleSheet(f"color: {color};")
         self.cover.set_url(track.cover if track else None)
+        self.summary_cover.set_url(track.cover if track else None)
         payload = {}
         if media:
             displayed = track or Track(media.title, media.artist, media.album, media.duration)
@@ -569,11 +693,15 @@ class SettingsDialog(QDialog):
         self.elapsed.setText(self._timecode(position))
         self.duration.setText(self._timecode(duration) if duration else "—:—")
         self.progress.setValue(round(1000 * position / duration) if duration else 0)
-        self.track_title.setText(payload.get("details", tr("playback.empty")))
-        self.track_artist.setText(payload.get("state", tr("playback.empty_hint")))
+        self.track_title.setText(
+            track.full_title if track else media.title if media else tr("playback.empty")
+        )
+        self.track_artist.setText(
+            track.artist if track else media.artist if media else tr("playback.empty_hint")
+        )
         album = payload.get("large_text", "")
         self.track_album.setText(album)
-        self.track_album.setVisible(bool(album))
+        self.track_title.setToolTip(album)
         source = f"{media.source}  ·  " if media else ""
         source += (
             (
@@ -589,16 +717,56 @@ class SettingsDialog(QDialog):
                 "idle": "",
             }.get(state, "")
         )
-        if len(value) > 4 and value[4]:
+        if track and len(value) > 4 and value[4]:
             source += ("\n" if source else "") + render(value[4])
         self.track_source.setText(source)
-        self.track_link.setTextFormat(Qt.TextFormat.RichText)
-        self.track_link.setText(
-            f'<a style="color:#f5ca66" href="{escape(track.url, quote=True)}">'
-            f"{escape(tr('playback.open_track'))}</a>"
-            if track and track.url
+        self.track_source.setVisible(bool(source))
+        self.track_link.setEnabled(
+            bool(track and track.url and QUrl(track.url).scheme() == "https")
+        )
+        self.cover_summary.setText(
+            tr(
+                "cover.found",
+                source=tr("music.name")
+                if track.source in ("Yandex", "Yandex Music", "")
+                else track.source,
+            )
+            if track and track.cover
+            else tr("cover.not_found") if state == "not_found"
+            else tr("cover.waiting")
+        )
+        self.cover_summary.setStyleSheet(
+            "color: #ffb4ba;"
+            if state == "not_found"
             else ""
         )
+
+    def _open_track(self):
+        track = self._track[1]
+        if track and track.url and QUrl(track.url).scheme() == "https":
+            QDesktopServices.openUrl(QUrl(track.url))
+
+    def set_discord_profile(self, profile):
+        import re
+
+        self._discord_profile = profile
+        connected = profile.get("connected", False)
+        username = profile.get("username") or ""
+        self.discord_name.setText(profile.get("global_name") or username or "Discord")
+        self.discord_username.setText(
+            f"@{username}"
+            if username
+            else tr("discord.profile_missing" if connected else "discord.offline_hint")
+        )
+        self.discord_state.setText(
+            "●  " + tr("discord.connected" if connected else "discord.disconnected")
+        )
+        self.discord_state.setStyleSheet("color: #9dd9ad;" if connected else "color: #a8a8af;")
+        user_id, avatar = str(profile.get("id") or ""), str(profile.get("avatar") or "")
+        url = None
+        if connected and user_id.isdigit() and re.fullmatch(r"(?:a_)?[a-fA-F0-9]+", avatar):
+            url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar}.png?size=128"
+        self.discord_avatar.set_url(url)
 
     @staticmethod
     def _timecode(seconds):
@@ -608,21 +776,7 @@ class SettingsDialog(QDialog):
         return f"{hours}:{minutes:02}:{seconds:02}" if hours else f"{minutes:02}:{seconds:02}"
 
     def _show_account_info(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("account.title"))
-        dialog.setMinimumWidth(470)
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
-        layout.addWidget(self._translated_label("account.why_title", "brand"))
-        text = bind_text(QLabel(), "account.help")
-        text.setWordWrap(True)
-        text.setOpenExternalLinks(True)
-        layout.addWidget(text)
-        close = bind_text(QPushButton(), "common.got_it")
-        close.clicked.connect(dialog.accept)
-        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
-        dialog.exec()
+        MessageDialog(self, tr("account.why_title"), tr("account.help"), rich_text=True).exec()
 
     def _form_settings(self) -> Settings:
         return Settings(
@@ -635,28 +789,26 @@ class SettingsDialog(QDialog):
             display_format=DisplayFormat(self.display.currentData()),
             selected_session=self.session.currentData(),
             pause_timeout=-1 if self.never_hide.isChecked() else self.pause_timeout.value(),
+            last_pause_timeout=self.pause_timeout.value(),
             show_unknown_media=self.show_unknown.isChecked(),
         )
 
-    def _update_dirty(self):
-        self.save_timer.stop()
-        self.save_status.clear()
-        self.save_button.setVisible(self._form_settings() != self.config.settings)
-
     def _save(self) -> None:
         settings = self._form_settings()
+        previous = self.config.settings
+        if settings == previous:
+            return
         try:
             self.config.save(settings)
         except (OSError, ValueError) as error:
-            show_message(self, tr("settings.save_failed"), str(error), QMessageBox.Icon.Warning)
+            show_message(self, tr("settings.save_failed"), str(error))
             return
-        set_language(settings.app_language)
-        retranslate(self)
-        self.update_sessions(self._sessions)
-        self.set_account(self._account)
+        if settings.app_language != previous.app_language:
+            set_language(settings.app_language)
+            retranslate(self)
+            self.update_sessions(self._sessions)
+        self.set_account(self._account, self._account_avatar)
         self.set_track(self._track)
         self.set_status(self._status)
+        self.set_discord_profile(self._discord_profile)
         self.saved.emit()
-        self.save_button.hide()
-        self.save_status.setText(tr("settings.saved"))
-        self.save_timer.start()

@@ -20,17 +20,18 @@ def _run() -> int:
 
     from PyQt6.QtCore import QCoreApplication, Qt, QTimer
     from PyQt6.QtGui import QIcon
-    from PyQt6.QtWidgets import QApplication, QMessageBox
+    from PyQt6.QtWidgets import QApplication
 
     from .config import ConfigStore
     from .constants import resource_path
-    from .fonts import application_font
+    from .fonts import application_font, configure_text_rendering
     from .logging_setup import configure_logging
     from .tray import TrayController
     from .ui_i18n import show_message
     from .windows import SingleInstance
 
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+    configure_text_rendering()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setFont(application_font())
@@ -112,7 +113,6 @@ def _run() -> int:
             None,
             "WinYandexMusicRPC",
             tr("app.start_failed"),
-            QMessageBox.Icon.Critical,
         )
         return 1
     finally:

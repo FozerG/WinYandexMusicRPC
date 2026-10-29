@@ -1,7 +1,7 @@
 /img/
 /build/
 /dist/
-/__pycache__/
+/output/
 __pycache__/
 .venv/
 .pytest_cache/

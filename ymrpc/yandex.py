@@ -1,4 +1,7 @@
+import json
 import logging
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from yandex_music import Client
 
@@ -6,6 +9,22 @@ from .matching import choose, normalize
 from .models import MediaSnapshot, Track
 
 logger = logging.getLogger(__name__)
+
+
+def account_avatar(token: str) -> str:
+    request = Request(
+        "https://login.yandex.ru/info?format=json",
+        headers={"Authorization": f"OAuth {token}"},
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            profile = json.load(response)
+        avatar = profile.get("default_avatar_id")
+        if isinstance(avatar, str) and avatar and profile.get("is_avatar_empty") is False:
+            return f"https://avatars.yandex.net/get-yapic/{quote(avatar, safe='/')}/islands-200"
+    except (OSError, ValueError, AttributeError) as error:
+        logger.debug("Yandex avatar unavailable (%s)", type(error).__name__)
+    return ""
 
 
 def track_metadata(track) -> Track:

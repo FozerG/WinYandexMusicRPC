@@ -2,15 +2,17 @@ import logging
 import subprocess
 import webbrowser
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
+from PyQt6.QtCore import QPoint, QTimer
+from PyQt6.QtGui import QCursor, QIcon
+from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
 
 from .config import ConfigStore, data_directory
 from .constants import APP_NAME, REPO_URL, resource_path
+from .dialogs import update_dialog
 from .i18n import message, render, set_language, tr
 from .settings import SettingsDialog
 from .ui_i18n import bind_text, retranslate, show_message
+from .widgets import RoundedMenu
 from .windows import autostart_enabled, set_autostart
 from .worker import PresenceWorker
 
@@ -27,27 +29,30 @@ class TrayController:
         self.auth_dialog = None
         self._quitting = False
         self._track = (None, None, "idle")
+        self._discord_profile = {"connected": False}
         self._auth_busy = False
         self.worker = PresenceWorker(config)
         self.tray = QSystemTrayIcon(QIcon(str(resource_path("YMRPC_ico.ico"))), app)
         self.tray.setToolTip(APP_NAME)
-        self.menu = QMenu()
+        self.menu = RoundedMenu(compact=True)
         self._status_text = message("status.waiting")
         self._account_text = None
+        self._account_avatar = ""
         self._autostart_enabled = autostart_enabled()
         bind_text(self.menu.addAction("", self.open_settings), "tray.open")
-        self.menu.addSeparator()
-        bind_text(self.menu.addAction("", self._open_logs), "logs.open")
-        self.menu.addAction("GitHub", lambda: webbrowser.open(REPO_URL))
         self.check_updates = bind_text(
             self.menu.addAction("", self._check_updates), "updates.check"
         )
+        self.menu.addSeparator()
+        bind_text(self.menu.addAction("", self._open_logs), "logs.open")
+        self.menu.addAction("GitHub", lambda: webbrowser.open(REPO_URL))
+        self.menu.addSeparator()
         bind_text(self.menu.addAction("", self.quit), "tray.quit")
-        self.tray.setContextMenu(self.menu)
         self.tray.activated.connect(self._activated)
         self.worker.sessions_changed.connect(self._sessions_changed)
         self.worker.status_changed.connect(self._status_changed)
         self.worker.account_changed.connect(self._account_changed)
+        self.worker.discord_profile_changed.connect(self._discord_profile_changed)
         self.worker.track_changed.connect(self._track_changed)
         self.worker.authentication_finished.connect(self._authentication_finished)
         self.worker.update_checked.connect(self._update_checked)
@@ -59,6 +64,20 @@ class TrayController:
     def _activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.open_settings()
+        elif reason == QSystemTrayIcon.ActivationReason.Context:
+            self._show_tray_menu()
+
+    def _show_tray_menu(self) -> None:
+        anchor = QCursor.pos()
+        self.menu.ensurePolished()
+        size = self.menu.sizeHint()
+        position = anchor - QPoint(size.width(), size.height())
+        screen = self.app.screenAt(anchor) or self.app.primaryScreen()
+        if screen is not None:
+            bounds = screen.availableGeometry()
+            position.setX(max(bounds.left(), min(position.x(), bounds.right() - size.width() + 1)))
+            position.setY(max(bounds.top(), min(position.y(), bounds.bottom() - size.height() + 1)))
+        self.menu.popup(position)
 
     def open_settings(self) -> None:
         if self.settings_dialog is None:
@@ -70,7 +89,8 @@ class TrayController:
             self.settings_dialog.autostart_changed.connect(self._set_autostart)
             self.settings_dialog.updates_requested.connect(self._check_updates)
             self.settings_dialog.logs_requested.connect(self._open_logs)
-            self.settings_dialog.set_account(self._account_text)
+            self.settings_dialog.set_account(self._account_text, self._account_avatar)
+            self.settings_dialog.set_discord_profile(self._discord_profile)
             self.settings_dialog.set_auth_busy(self._auth_busy)
             self.settings_dialog.set_autostart(self._autostart_enabled)
             self.settings_dialog.set_status(self._status_text)
@@ -117,17 +137,22 @@ class TrayController:
     def _check_updates(self) -> None:
         self.check_updates.setEnabled(False)
         if self.settings_dialog:
+            self.settings_dialog.setFocus()
             self.settings_dialog.update_button.setEnabled(False)
+            self.settings_dialog.update_button.setText(tr("updates.checking"))
         self.worker.check_updates()
 
     def _update_checked(self, message) -> None:
         self.check_updates.setEnabled(True)
         if self.settings_dialog:
             self.settings_dialog.update_button.setEnabled(True)
-        self.tray.showMessage(APP_NAME, render(message))
+            self.settings_dialog.update_button.setText(tr("updates.check"))
+        update_dialog(self.settings_dialog, message).exec()
 
     def _authentication_finished(self, success: bool, message) -> None:
         self._set_auth_busy(False)
+        if success and message.key == "account.signed_in":
+            return
         icon = (
             QSystemTrayIcon.MessageIcon.Information
             if success
@@ -153,7 +178,7 @@ class TrayController:
             logger.info("Windows autostart: %s", enabled)
         except OSError as error:
             self._autostart_enabled = autostart_enabled()
-            show_message(None, tr("app.autostart_failed"), str(error), QMessageBox.Icon.Warning)
+            show_message(None, tr("app.autostart_failed"), str(error))
         if self.settings_dialog:
             self.settings_dialog.set_autostart(self._autostart_enabled)
 
@@ -162,7 +187,7 @@ class TrayController:
             subprocess.Popen(["explorer.exe", "/select,", str(data_directory() / "rpc.log")])
         except OSError as error:
             show_message(
-                self.settings_dialog, tr("logs.unavailable"), str(error), QMessageBox.Icon.Warning
+                self.settings_dialog, tr("logs.unavailable"), str(error)
             )
 
     def _startup_updates(self):
@@ -174,10 +199,16 @@ class TrayController:
         if self.settings_dialog:
             self.settings_dialog.set_auth_busy(busy)
 
-    def _account_changed(self, text):
+    def _account_changed(self, text, avatar_url):
         self._account_text = text
+        self._account_avatar = avatar_url
         if self.settings_dialog:
-            self.settings_dialog.set_account(text)
+            self.settings_dialog.set_account(text, avatar_url)
+
+    def _discord_profile_changed(self, profile):
+        self._discord_profile = profile
+        if self.settings_dialog:
+            self.settings_dialog.set_discord_profile(profile)
 
     def _track_changed(self, value):
         self._track = value
