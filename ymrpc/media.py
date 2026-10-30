@@ -422,7 +422,7 @@ class WindowsMediaSource:
                 if properties is not None
                 else ("", "", "")
             )
-            if metadata[2].casefold() == "треки":
+            if metadata[2].casefold() in {"треки", "мои треки"}: # VK (vk.ru) sends playlist names as album metadata.
                 metadata = (metadata[0], metadata[1], "")
             if metadata != session.metadata or not session.artwork_key:
                 self._artwork_generation += 1

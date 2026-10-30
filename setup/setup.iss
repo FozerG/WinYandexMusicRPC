@@ -1,5 +1,5 @@
 ﻿#ifndef ScriptVersion
-#define ScriptVersion "3.0"
+#define ScriptVersion "3.1"
 #endif
 #ifndef PayloadDir
 #define PayloadDir "..\dist\WinYandexMusicRPC-gui"
