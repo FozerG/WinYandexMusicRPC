@@ -1,4 +1,4 @@
-from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QCoreApplication, QEvent, QSize, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QIcon
 from PyQt6.QtWidgets import (
     QFrame,
@@ -16,6 +16,8 @@ from PyQt6.QtWidgets import (
 from . import __version__
 from .config import ConfigStore
 from .constants import resource_path
+from .cover_hosts import UNUSED_UPLOADS
+from .covers import CoverResult
 from .dialogs import MessageDialog
 from .fonts import application_font, load_fonts
 from .i18n import Message, message, render, set_language, tr
@@ -131,8 +133,13 @@ class SettingsDialog(RoundedDialog):
             "capture.unknown_warning",
             "warning",
         )
-        self.warning.setVisible(settings.show_unknown_media)
         self.show_unknown.toggled.connect(self.warning.setVisible)
+        self.show_unknown_cover = bind_text(ToggleSwitch(), "capture.unknown_cover")
+        self.show_unknown_cover.setChecked(settings.show_unknown_cover)
+        self.cover_warning = self._translated_label("capture.cover_warning", "warning")
+        self.cover_warning.setTextFormat(Qt.TextFormat.RichText)
+        self.show_unknown.toggled.connect(self._update_cover_controls)
+        self.show_unknown_cover.toggled.connect(self._update_cover_controls)
         self.autostart = ToggleSwitch()
         bind_text(self.autostart, "app.autostart", "setAccessibleName")
         self.autostart.toggled.connect(self.autostart_changed)
@@ -184,7 +191,7 @@ class SettingsDialog(RoundedDialog):
         track_row.setSpacing(16)
         self.playback_heading = self._translated_label("playback.heading", "playbackHeading")
         self.playback_heading.hide()
-        self.cover = CoverArt(size=128)
+        self.cover = CoverArt(size=128, placeholder_size=44)
         track_row.addWidget(self.cover)
         track_text = QVBoxLayout()
         track_text.setSpacing(8)
@@ -342,6 +349,21 @@ class SettingsDialog(RoundedDialog):
             row.setContentsMargins(0, 0, 0, 0)
             details_layout.addWidget(container)
             self.source_rows[source] = container
+        self.upload_details = QWidget()
+        uploads_layout = QVBoxLayout(self.upload_details)
+        uploads_layout.setContentsMargins(0, 10, 0, 0)
+        self.upload_heading = self._translated_label("uploads.heading", "rowTitle")
+        uploads_layout.addWidget(self.upload_heading)
+        uploads_layout.addSpacing(6)
+        self.upload_labels = {}
+        for name, _ in UNUSED_UPLOADS:
+            row = QHBoxLayout()
+            row.addWidget(self._label(name), 1)
+            label = self._label("", "muted")
+            row.addWidget(label)
+            uploads_layout.addLayout(row)
+            self.upload_labels[name] = label
+        details_layout.addWidget(self.upload_details)
         overview.addStretch()
 
         activity = self._page("nav.activity", "activity.description")
@@ -418,6 +440,10 @@ class SettingsDialog(RoundedDialog):
         self._row(windows_layout, "nav.application", "capture.session_hint", self.session)
         windows_layout.addWidget(self.show_unknown)
         windows_layout.addWidget(self.warning)
+        windows_layout.addWidget(self.show_unknown_cover)
+        windows_layout.addWidget(self.cover_warning)
+        self.warning.setVisible(settings.show_unknown_media)
+        self._update_cover_controls()
         capture.addWidget(self.windows_controls)
         self.capture_mode.currentIndexChanged.connect(self._update_capture_mode)
         self._update_capture_mode()
@@ -466,6 +492,7 @@ class SettingsDialog(RoundedDialog):
             control.currentIndexChanged.connect(self._save)
         self.pause_timeout.valueChanged.connect(self._save)
         self.show_unknown.toggled.connect(self._save)
+        self.show_unknown_cover.toggled.connect(self._save)
         self.never_hide.toggled.connect(self._save)
         self.fix_pause.toggled.connect(self._save)
 
@@ -492,6 +519,35 @@ class SettingsDialog(RoundedDialog):
             page.widget().layout().activate()
             if expanded:
                 page.ensureWidgetVisible(self.search_details, 0, 12)
+        finally:
+            page.setUpdatesEnabled(True)
+
+    def _update_cover_controls(self):
+        page = self.pages.widget(2) if hasattr(self, "pages") and self.pages.count() > 2 else None
+        if page:
+            page.setUpdatesEnabled(False)
+        enabled = self.show_unknown.isChecked()
+        self.show_unknown_cover.setVisible(enabled)
+        self.cover_warning.setVisible(enabled and self.show_unknown_cover.isChecked())
+        if page:
+            # The toggled signal also saves/retranslates the form. Keep painting
+            # suspended until those synchronous changes and the layout settle.
+            QTimer.singleShot(0, lambda: self._settle_cover_controls(page))
+
+    def _settle_cover_controls(self, page):
+        try:
+            content = page.widget()
+            content.layout().invalidate()
+            content.layout().activate()
+            content.resize(page.viewport().size().expandedTo(content.minimumSizeHint()))
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
+            content.layout().activate()
+            if not self.cover_warning.isHidden():
+                bottom = self.cover_warning.mapTo(
+                    content, self.cover_warning.rect().bottomLeft()
+                ).y()
+                bar = page.verticalScrollBar()
+                bar.setValue(max(bar.value(), bottom + 12 - page.viewport().height()))
         finally:
             page.setUpdatesEnabled(True)
 
@@ -670,11 +726,33 @@ class SettingsDialog(RoundedDialog):
             text, color = statuses.get(source_states.get(source, "unused"), statuses["unused"])
             label.setText(text)
             label.setStyleSheet(f"color: {color};")
-        self.cover.set_url(track.cover if track else None)
-        self.summary_cover.set_url(track.cover if track else None)
+        fallback = capture_info.get("cover", CoverResult())
+        fallback_enabled = (
+            not ynison and self.config.settings.show_unknown_media
+            and self.config.settings.show_unknown_cover
+        )
+        if not fallback_enabled:
+            fallback = CoverResult(state="disabled")
+        elif fallback.state == "disabled":
+            fallback = CoverResult()
+        self.upload_details.setVisible(fallback_enabled)
+        self.upload_heading.setToolTip(tr("uploads." + fallback.state))
+        upload_states = dict(fallback.sources)
+        for name, label in self.upload_labels.items():
+            upload_state = upload_states.get(name, "unused")
+            label.setText(tr("uploads." + upload_state))
+            label.setStyleSheet("color: " + {
+                "uploaded": "#9dd9ad", "uploading": "#f5ca66",
+                "unavailable": "#efd497", "rate_limited": "#efd497",
+            }.get(upload_state, "#9898a3") + ";")
+        cover_url = track.cover if track else fallback.url
+        self.cover.set_url(cover_url)
+        self.summary_cover.set_url(cover_url)
         payload = {}
         if media:
-            displayed = track or Track(media.title, media.artist, media.album, media.duration)
+            displayed = track or Track(
+                media.title, media.artist, media.album, media.duration, cover=cover_url
+            )
             payload = build_payload(media, displayed, self.config.settings, wall_time=0)
         self.playback_heading.setText(
             (
@@ -724,6 +802,11 @@ class SettingsDialog(RoundedDialog):
         self.track_link.setEnabled(
             bool(track and track.url and QUrl(track.url).scheme() == "https")
         )
+        unverified_blocked = (
+            not ynison and media is not None and track is None
+            and state in ("not_found", "unavailable")
+            and not self.config.settings.show_unknown_media
+        )
         self.cover_summary.setText(
             tr(
                 "cover.found",
@@ -732,13 +815,16 @@ class SettingsDialog(RoundedDialog):
                 else track.source,
             )
             if track and track.cover
-            else tr("cover.not_found") if state == "not_found"
+            else tr("cover.temporary", source=fallback.host) if fallback.url and not track
+            else tr("cover.not_found") if unverified_blocked
+            else tr("cover.no_artwork") if track
+            else tr("cover.missing") if state in ("not_found", "unavailable")
             else tr("cover.waiting")
         )
         self.cover_summary.setStyleSheet(
             "color: #ffb4ba;"
-            if state == "not_found"
-            else ""
+            if unverified_blocked
+            else "color: #f5f5f5;"
         )
 
     def _open_track(self):
@@ -791,6 +877,7 @@ class SettingsDialog(RoundedDialog):
             pause_timeout=-1 if self.never_hide.isChecked() else self.pause_timeout.value(),
             last_pause_timeout=self.pause_timeout.value(),
             show_unknown_media=self.show_unknown.isChecked(),
+            show_unknown_cover=self.show_unknown_cover.isChecked(),
         )
 
     def _save(self) -> None:

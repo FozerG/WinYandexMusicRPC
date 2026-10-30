@@ -35,6 +35,8 @@ class _Session:
     playback_dirty: Event = field(default_factory=_dirty_event)
     timeline_dirty: Event = field(default_factory=_dirty_event)
     metadata: tuple[str, str, str] = ("", "", "")
+    properties: object = None
+    artwork_key: int = 0
     status: PlaybackStatus = PlaybackStatus.UNKNOWN
     timeline: tuple = (0, 0, None)
     metadata_at: float = 0
@@ -82,6 +84,32 @@ class WindowsMediaSource:
         self._operation_at = 0
         self._last_slow_log = float("-inf")
         self.session_ids: tuple[str, ...] = ()
+        self._thumbnail_enabled = False
+        self._artwork_generation = 0
+
+    def enable_thumbnails(self, enabled: bool) -> None:
+        if enabled == self._thumbnail_enabled:
+            return
+        self._thumbnail_enabled = enabled
+        for session in self._sessions:
+            session.properties = None
+            if enabled:
+                session.metadata_dirty.set()
+
+    def thumbnail_properties(self, media: MediaSnapshot):
+        """Return the already fetched, agile WinRT object; never read Thumbnail here."""
+        if not self._thumbnail_enabled:
+            return None
+        for session in self._sessions:
+            if (
+                session.artwork_key == media.artwork_key
+                and session.source == media.source
+                and session.metadata == (media.title, media.artist, media.album)
+                and not session.metadata_dirty.is_set()
+                and not self._sessions_dirty.is_set()
+            ):
+                return session.properties
+        return None
 
     async def read(self, selected: str, *, timeout: float = 5) -> MediaSnapshot | None:
         snapshots = await self._read_bounded(selected, timeout)
@@ -385,7 +413,7 @@ class WindowsMediaSource:
             properties = await self._await_operation(
                 session.handle.try_get_media_properties_async()
             )
-            session.metadata = (
+            metadata = (
                 (
                     (properties.title or "").strip(),
                     (properties.artist or "").strip(),
@@ -394,6 +422,13 @@ class WindowsMediaSource:
                 if properties is not None
                 else ("", "", "")
             )
+            if metadata[2].casefold() == "треки":
+                metadata = (metadata[0], metadata[1], "")
+            if metadata != session.metadata or not session.artwork_key:
+                self._artwork_generation += 1
+                session.artwork_key = self._artwork_generation
+            session.metadata = metadata
+            session.properties = properties if self._thumbnail_enabled else None
             session.metadata_at = self._clock() + (
                 METADATA_INTERVAL if session.metadata[0] else PLAYBACK_INTERVAL
             )
@@ -425,7 +460,8 @@ class WindowsMediaSource:
         if duration:
             position = min(position, duration)
         return MediaSnapshot(
-            session.source, title, artist, album, session.status, position, duration
+            session.source, title, artist, album, session.status, position, duration,
+            artwork_key=session.artwork_key,
         )
 
     def _reset(self):

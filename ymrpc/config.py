@@ -76,6 +76,7 @@ class ConfigStore:
             pause_timeout=timeout,
             last_pause_timeout=last_timeout,
             show_unknown_media=str(section.get("show_unknown_media", "False")).lower() == "true",
+            show_unknown_cover=str(section.get("show_unknown_cover", "False")).lower() == "true",
             selected_session=section.get("selected_session", "Automatic") or "Automatic",
         )
 
@@ -93,6 +94,7 @@ class ConfigStore:
                 parser.add_section("UserSettings")
             parser.remove_option("UserSettings", "strong_find")
             parser.remove_option("UserSettings", "interface_font")
+            parser.remove_option("UserSettings", "disabled_cover_hosts")
             parser["UserSettings"].update(
                 {
                     "capture_mode": settings.capture_mode.name,
@@ -105,6 +107,7 @@ class ConfigStore:
                     "pause_timeout": str(settings.pause_timeout),
                     "last_pause_timeout": str(settings.last_pause_timeout),
                     "show_unknown_media": str(settings.show_unknown_media),
+                    "show_unknown_cover": str(settings.show_unknown_cover),
                     "selected_session": settings.selected_session,
                 }
             )

@@ -6,6 +6,8 @@ REPO_URL = "https://github.com/FozerG/WinYandexMusicRPC"
 CLIENT_ID_EN = "1269807014393942046"
 CLIENT_ID_RU_LISTENING = "1269826362399522849"
 ASSETS_URL = f"https://raw.githubusercontent.com/FozerG/{APP_NAME}/main/assets"
+# Upload assets/music_note.png under this name to both Discord applications.
+MUSIC_NOTE_ASSET = "music_note"
 OAUTH_URL = (
     "https://oauth.yandex.ru/authorize?response_type=token"
     "&client_id=23cabbbdc6cd418abb4b39c32c41195d"

@@ -8,6 +8,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from yandex_music import Client
 
 from .config import ConfigStore
+from .covers import FallbackCovers
 from .discord import DiscordConnection
 from .i18n import message
 from .media import WindowsMediaSource
@@ -64,6 +65,12 @@ class PresenceWorker(QThread):
         pythoncom.CoInitializeEx(pythoncom.COINIT_MULTITHREADED)
         media_loop = asyncio.new_event_loop()
         source = WindowsMediaSource()
+        covers = FallbackCovers(authorized=lambda: (
+            not self._stop.is_set()
+            and self.config.settings.capture_mode == CaptureMode.WINDOWS
+            and self.config.settings.show_unknown_media
+            and self.config.settings.show_unknown_cover
+        ))
         ynison = YnisonSource()
         resolver = TrackResolver()
         discord = DiscordConnection(profile_changed=self.discord_profile_changed.emit)
@@ -84,6 +91,10 @@ class PresenceWorker(QThread):
                 self._wake.clear()
                 self._process_commands(tokens, resolver)
                 settings = self.config.settings
+                source.enable_thumbnails(
+                    settings.capture_mode == CaptureMode.WINDOWS
+                    and settings.show_unknown_media and settings.show_unknown_cover
+                )
                 if settings != previous_settings:
                     grace = PresenceGrace()
                     if settings.capture_mode != previous_settings.capture_mode:
@@ -99,6 +110,7 @@ class PresenceWorker(QThread):
                     previous_settings = settings
                 try:
                     if settings.capture_mode == CaptureMode.YNISON:
+                        covers.poll()
                         result = media_loop.run_until_complete(ynison.read(self._ynison_token))
                         if settings.fix_ynison_pause:
                             result = media_loop.run_until_complete(correct_pause(result, source))
@@ -184,11 +196,22 @@ class PresenceWorker(QThread):
                         source_states = result.sources
                     last_ignored = ignored_key
                     visible = playback.visible(media, settings.pause_timeout, time.monotonic())
+                    cover_enabled = bool(
+                        media and visible and not track
+                        and search_state in ("not_found", "unavailable")
+                        and settings.show_unknown_media and settings.show_unknown_cover
+                    )
+                    cover_result = covers.poll(
+                        media, source.thumbnail_properties(media) if cover_enabled else None,
+                        enabled=cover_enabled,
+                    )
                     status = message("status.waiting")
                     if media is not None and visible:
                         # Search may outlive a track when the user skips several songs.
                         current = media_loop.run_until_complete(source.read(verification_session))
-                        if current is None or current.identity != media.identity:
+                        if (current is None or current.identity != media.identity
+                                or current.artwork_key != media.artwork_key):
+                            covers.poll()
                             if not grace.hold(False, True, time.monotonic()):
                                 discord.publish(client_id(settings), None)
                             self._wake.wait(0.2)
@@ -203,6 +226,7 @@ class PresenceWorker(QThread):
                                     media.artist,
                                     media.album,
                                     media.duration,
+                                    cover=cover_result.url,
                                 )
                                 payload = build_payload(media, displayed, settings, time.time())
                                 status = (
@@ -242,10 +266,12 @@ class PresenceWorker(QThread):
                         last_status = status
                     self.status_changed.emit(status)
                     self.track_changed.emit(
-                        (media, track, search_state, source_states, ignored_info)
+                        (media, track, search_state, source_states, ignored_info,
+                         {"cover": cover_result})
                     )
                     last_error = None
                 except Exception as error:
+                    covers.poll()
                     error_type = type(error).__name__
                     if error_type != last_error:
                         logger.warning(
@@ -265,6 +291,7 @@ class PresenceWorker(QThread):
                         self.sessions_changed.emit(session_ids)
                 self._wake.wait(1)
         finally:
+            covers.close()
             media_loop.run_until_complete(source.close())
             media_loop.run_until_complete(ynison.close())
             discord.close()

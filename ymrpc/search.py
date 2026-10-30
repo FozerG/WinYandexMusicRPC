@@ -56,7 +56,8 @@ class TrackResolver:
                 result = self._pending.result()
                 if result.state != "cancelled" and self._pending_key[0] == self._generation:
                     self._cache[self._pending_key] = (
-                        self._clock() + (3600 if result.track else 60),
+                        float("inf") if result.state == "not_found"
+                        else self._clock() + (3600 if result.track else 60),
                         result,
                     )
                 self._pending = None
@@ -71,7 +72,7 @@ class TrackResolver:
         if not media.artist.strip():
             logger.info("Search skipped: media has no artist credit")
             result = SearchResult(state="not_found")
-            self._cache[key] = (self._clock() + 60, result)
+            self._cache[key] = (float("inf"), result)
             while len(self._cache) > 128:
                 self._cache.popitem(last=False)
             return result
@@ -84,15 +85,26 @@ class TrackResolver:
                 media,
                 tuple(self.providers),
                 self._cancel,
+                cached[1].sources if cached and cached[1].state == "unavailable" else (),
             )
-        return self._progress if key == self._pending_key else SearchResult()
+        progress = self._progress if key == self._pending_key else SearchResult()
+        if cached:
+            # Preserve RPC while retrying catalog errors in the background.
+            return SearchResult(cached[1].track, cached[1].state, progress.sources)
+        return progress
 
-    def _search(self, media, providers, cancel):
+    def _search(self, media, providers, cancel, previous_sources=()):
         unavailable = False
-        states = {provider.name: "unused" for provider in providers}
+        previous = dict(previous_sources)
+        states = {
+            provider.name: "not_found" if previous.get(provider.name) == "not_found" else "unused"
+            for provider in providers
+        }
         for provider in providers:
             if cancel.is_set():
                 return SearchResult(state="cancelled")
+            if states[provider.name] == "not_found":
+                continue
             if self._clock() < self._retry_at.get(provider, 0):
                 unavailable = True
                 states[provider.name] = "unavailable"

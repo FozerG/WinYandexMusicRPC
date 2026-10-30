@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
 
 class CoverArt(QLabel):
     def __init__(self, parent=None, *, size=80, circular=False, placeholder="♪",
-                 hide_until_loaded=False):
+                 hide_until_loaded=False, placeholder_size=36):
         super().__init__(parent)
         self._hide_until_loaded = hide_until_loaded
         if hide_until_loaded:
@@ -44,7 +44,7 @@ class CoverArt(QLabel):
         self._image = QPixmap()
         self.setFixedSize(size, size)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setStyleSheet("background: transparent; font-size: 36px;")
+        self.setStyleSheet(f"background: transparent; font-size: {placeholder_size}px;")
         self.setText(self._placeholder)
         self._network = QNetworkAccessManager(self)
         self._reply = None

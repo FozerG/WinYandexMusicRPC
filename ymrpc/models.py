@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 
 
@@ -52,6 +52,7 @@ class Settings:
     pause_timeout: int = 300
     last_pause_timeout: int = 300
     show_unknown_media: bool = False
+    show_unknown_cover: bool = False
     selected_session: str = "Automatic"
     app_language: Language = Language.ENGLISH
 
@@ -65,6 +66,7 @@ class MediaSnapshot:
     status: PlaybackStatus = PlaybackStatus.PLAYING
     position: float = 0
     duration: float = 0
+    artwork_key: int = field(default=0, compare=False)
 
     @property
     def identity(self) -> tuple[str, str, str]:

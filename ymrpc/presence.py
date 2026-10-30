@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from .constants import ASSETS_URL, CLIENT_ID_EN, CLIENT_ID_RU_LISTENING
+from .constants import ASSETS_URL, CLIENT_ID_EN, CLIENT_ID_RU_LISTENING, MUSIC_NOTE_ASSET
 from .i18n import tr
 from .models import (
     Buttons,
@@ -60,8 +60,7 @@ def build_payload(
         "small_image": f"{ASSETS_URL}/{'Playing' if playing else 'Paused'}.png",
         "small_text": tr("presence.playing" if playing else "presence.paused", language=language),
     }
-    if track.cover:
-        payload["large_image"] = track.cover
+    payload["large_image"] = track.cover or MUSIC_NOTE_ASSET
     payload["name"] = discord_text(
         status_name(media, track, settings.display_format, settings.language)
     )
