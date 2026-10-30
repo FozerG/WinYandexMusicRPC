@@ -17,8 +17,8 @@
 </p>
 
 ## Скачать
-[<img src="https://github.com/user-attachments/assets/3e11edd6-74eb-4a30-a779-eae4302c9726" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.0/WinYandexMusicRPC_Installer_3.0.exe)
-[<img src="https://github.com/user-attachments/assets/bd6f2464-2404-49be-9364-821c626d4cd3" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.0/WinYandexMusicRPC_Portable_3.0.zip)
+[<img src="https://github.com/user-attachments/assets/3e11edd6-74eb-4a30-a779-eae4302c9726" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.1/WinYandexMusicRPC_Setup_3.1.exe)
+[<img src="https://github.com/user-attachments/assets/bd6f2464-2404-49be-9364-821c626d4cd3" width="190">](https://github.com/FozerG/WinYandexMusicRPC/releases/download/v3.1/WinYandexMusicRPC_Portable_3.1.zip)
 
 ## О программе
 
