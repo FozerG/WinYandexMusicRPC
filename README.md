@@ -97,6 +97,8 @@ python -m venv .venv
 
 Готовая программа находится в папке `dist/WinYandexMusicRPC-gui`. Для работы нужны `WinYandexMusicRPC.exe` и папка `_internal` рядом с ним.
 
+Для сборки установщика используйте [Inno Setup 7.1.1](setup/README.md).
+
 </details>
 
 ------------
