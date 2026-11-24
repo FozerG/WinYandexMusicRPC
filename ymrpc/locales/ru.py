@@ -1,6 +1,17 @@
 """ru translation catalog. Keep keys in sync with the other catalogs."""
 
 STRINGS = {
+    "stations.title": "Яндекс Станции",
+    "stations.playing": "Сейчас играет",
+    "stations.hint": "Компьютер и Яндекс Станции должны быть подключены к одной локальной сети.",
+
+    'stations.enable': 'Показывать музыку с Яндекс Станций',
+    'stations.loading': 'Загрузка Яндекс Станций…',
+    'stations.auth_required': 'Войдите в аккаунт Яндекс, чтобы увидеть свои Станции',
+    'stations.ready': '',
+    'stations.empty': 'В аккаунте не найдено Яндекс Станций.',
+    'stations.unavailable': 'Не удалось обновить список Яндекс Станций. Повторяем автоматически.',
+
     "common.later": "Позже",
     "updates.download": "Скачать",
     "updates.available_title": "Доступно обновление",
@@ -46,11 +57,6 @@ STRINGS = {
     "discord.profile_missing": "Discord не передал данные профиля",
     "app.autostart_hint": "Автоматический запуск при входе в систему",
     "updates.checking": "Проверяем обновления…",
-    "capture.ynison_outage": (
-        "В октябре 2026 года пострадали дата-центры Яндекса, после чего возникли проблемы "
-        "с работой Ynison. Получение текущего трека через серверы Яндекса всё ещё может "
-        "быть недоступно. Используйте Windows.Media.Control."
-    ),
     "activity.listening": "Слушает",
     "activity.playing": "Играет",
     "language.russian": "Русский",
@@ -121,14 +127,13 @@ STRINGS = {
     "playback.source_heading": "Источник воспроизведения",
     "playback.device_waiting": "Ожидание данных об устройстве",
     "playback.device": "Устройство: {device}",
-    "playback.pause_corrected": "\nПауза успешно исправлена через Windows.Media.Control",
+    "playback.pause_corrected": "Пауза исправлена",
     "search.searching": "◌  Ищем…",
     "search.matched": "✓  Найдено",
     "search.not_found": "×  Не найдено",
     "search.unavailable": "!  Ошибка запроса",
     "playback.paused_prefix": "На паузе · ",
     "playback.listening_prefix": "Слушает ",
-    "playback.direct": "Получено напрямую из Ynison",
     "playback.verified": "Подтверждено: {source}",
     "playback.searching": "Ищем в каталогах…",
     "playback.not_found": "Совпадение не найдено",

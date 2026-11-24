@@ -23,6 +23,8 @@ class YnisonSnapshot:
     state: str = "connecting"
     device_name: str = ""
     pause_corrected: bool = False
+    device_id: str = ""
+    station: bool = False
 
 
 class YnisonSource:
@@ -52,7 +54,6 @@ class YnisonSource:
         if self._task and self._task.done():
             try:
                 self._snapshot = self._task.result()
-                self._updated = time.monotonic()
                 self._last_error = None
             except Exception as error:
                 name = type(error).__name__
@@ -78,6 +79,7 @@ class YnisonSource:
         try:
             await asyncio.wait_for(ready.wait(), timeout=8)
             state = client.latest_state
+            received_at = time.monotonic()
         finally:
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(client.disconnect(), timeout=2)
@@ -121,9 +123,7 @@ class YnisonSource:
         duration = status.duration_ms / 1000 or track.duration
         position = max(0, status.progress_ms / 1000)
         self._speed = status.playback_speed or 1
-        elapsed = time.time() - status.version.timestamp_ms / 1000
-        if not status.paused and 0 <= elapsed < 86400:
-            position += elapsed * self._speed
+        self._updated = received_at
         if duration:
             position = min(position, duration)
         media = MediaSnapshot(
@@ -135,7 +135,7 @@ class YnisonSource:
             position=position,
             status=PlaybackStatus.PAUSED if status.paused else PlaybackStatus.PLAYING,
         )
-        return YnisonSnapshot(media, track, "direct", device_name=device)
+        return YnisonSnapshot(media, track, "direct", device_name=device, device_id=device_id)
 
     async def close(self):
         if self._task is not None:

@@ -1,6 +1,17 @@
 """en translation catalog. Keep keys in sync with the other catalogs."""
 
 STRINGS = {
+    "stations.title": "Yandex Stations",
+    "stations.playing": "Playing now",
+    "stations.hint": "Connect your computer and Yandex Stations to the same local network.",
+
+    'stations.enable': 'Show music from Yandex Stations',
+    'stations.loading': 'Loading Yandex Stations…',
+    'stations.auth_required': 'Sign in to your Yandex account to see your Stations',
+    'stations.ready': '',
+    'stations.empty': 'No Yandex Stations found in this account.',
+    'stations.unavailable': 'Could not refresh Yandex Stations. Retrying automatically.',
+
     "common.later": "Later",
     "updates.download": "Download",
     "updates.available_title": "An update is available",
@@ -46,11 +57,6 @@ STRINGS = {
     "discord.profile_missing": "Discord did not provide profile details",
     "app.autostart_hint": "Start automatically when you sign in",
     "updates.checking": "Checking for updates…",
-    "capture.ynison_outage": (
-        "Yandex data centers were affected in October 2026, after which Ynison began "
-        "experiencing issues. Retrieving the current track from Yandex servers may still "
-        "be unavailable. Use Windows.Media.Control instead."
-    ),
     "activity.listening": "Listening",
     "activity.playing": "Playing",
     "language.russian": "Русский",
@@ -121,14 +127,13 @@ STRINGS = {
     "playback.source_heading": "Playback source",
     "playback.device_waiting": "Waiting for device information",
     "playback.device": "Device: {device}",
-    "playback.pause_corrected": "\nPause corrected using Windows.Media.Control",
+    "playback.pause_corrected": "Pause corrected",
     "search.searching": "◌  Searching…",
     "search.matched": "✓  Found",
     "search.not_found": "×  Not found",
     "search.unavailable": "!  Request failed",
     "playback.paused_prefix": "Paused · ",
     "playback.listening_prefix": "Listening to ",
-    "playback.direct": "Received directly from Ynison",
     "playback.verified": "Verified by: {source}",
     "playback.searching": "Searching catalogs…",
     "playback.not_found": "No match found",

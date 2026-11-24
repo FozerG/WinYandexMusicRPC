@@ -29,6 +29,7 @@ from .models import (
     Language,
     PlaybackStatus,
     Settings,
+    StationPreference,
     Track,
 )
 from .presence import build_payload
@@ -66,7 +67,7 @@ class SettingsDialog(RoundedDialog):
         self._account_avatar = ""
         self._track = (None, None, "idle")
         self._status = message("status.waiting")
-        self._logged_in = False
+        self._auth_required = None
         self.setWindowTitle("WinYandexMusicRPC")
         self.setWindowIcon(QIcon(str(resource_path("YMRPC_ico.ico"))))
         load_fonts()
@@ -330,9 +331,6 @@ class SettingsDialog(RoundedDialog):
         self.search_details.hide()
         self.details_button.toggled.connect(self._toggle_details)
         overview.addWidget(search_card)
-        self.ynison_idle_notice = self._translated_label("capture.ynison_outage", "errorNotice")
-        self.ynison_idle_notice.hide()
-        overview.insertWidget(3, self.ynison_idle_notice)
         self.source_labels = {}
         self.source_rows = {}
         for source, _ in UNUSED_SOURCES:
@@ -409,8 +407,6 @@ class SettingsDialog(RoundedDialog):
             "warning",
         )
         capture.addWidget(self.ynison_warning)
-        self.ynison_outage_notice = self._translated_label("capture.ynison_outage", "errorNotice")
-        capture.addWidget(self.ynison_outage_notice)
         self.windows_description = self._translated_label(
             "capture.windows_description",
             "warning",
@@ -433,6 +429,34 @@ class SettingsDialog(RoundedDialog):
         pause_info.clicked.connect(self._show_pause_info)
         fix_layout.addWidget(pause_info)
         capture.addWidget(self.ynison_controls)
+        self.station_controls = QWidget()
+        station_layout = QVBoxLayout(self.station_controls)
+        station_layout.setContentsMargins(0, 0, 0, 0)
+        station_layout.setSpacing(capture.spacing())
+        self._divider(station_layout)
+        self.show_stations = bind_text(ToggleSwitch(), "stations.enable")
+        self.show_stations.setChecked(settings.show_stations)
+        station_layout.addWidget(self.show_stations)
+        self.station_list = QFrame(objectName="card")
+        card_layout = QVBoxLayout(self.station_list)
+        card_layout.setContentsMargins(18, 16, 18, 16)
+        card_layout.setSpacing(14)
+        card_layout.addWidget(self._translated_label("stations.title", "rowTitle"))
+        self.station_hint = self._translated_label("stations.loading", "muted")
+        card_layout.addWidget(self.station_hint)
+        self.station_rows = QVBoxLayout()
+        self.station_rows.setSpacing(0)
+        card_layout.addLayout(self.station_rows)
+        self.station_network_hint = self._translated_label("stations.hint", "muted")
+        self.station_network_hint.hide()
+        card_layout.addWidget(self.station_network_hint)
+        station_layout.addWidget(self.station_list)
+        self.station_list.setVisible(settings.show_stations)
+        self.show_stations.toggled.connect(self.station_list.setVisible)
+        self._station_devices = None
+        self._station_widgets = {}
+        self._station_badges = {}
+        capture.addWidget(self.station_controls)
         self.windows_controls = QWidget()
         windows_layout = QVBoxLayout(self.windows_controls)
         windows_layout.setContentsMargins(0, 0, 0, 0)
@@ -495,6 +519,7 @@ class SettingsDialog(RoundedDialog):
         self.show_unknown_cover.toggled.connect(self._save)
         self.never_hide.toggled.connect(self._save)
         self.fix_pause.toggled.connect(self._save)
+        self.show_stations.toggled.connect(self._save)
 
     @staticmethod
     def _service_icon(filename, size):
@@ -556,13 +581,14 @@ class SettingsDialog(RoundedDialog):
         self.windows_controls.setVisible(not ynison)
         self.windows_description.setVisible(not ynison)
         self.ynison_warning.setVisible(ynison)
-        self.ynison_outage_notice.setVisible(ynison)
         self.ynison_controls.setVisible(ynison)
+        self.station_controls.setVisible(ynison)
 
     def _update_capture_notice(self, auth_required=None):
         ynison = self.config.settings.capture_mode == CaptureMode.YNISON
-        missing = not self._logged_in if auth_required is None else auth_required
-        self.capture_notice.setVisible(ynison and missing)
+        if auth_required is not None:
+            self._auth_required = auth_required
+        self.capture_notice.setVisible(ynison and self._auth_required is True)
         if ynison:
             self.capture_notice.setText(tr("capture.sign_in_required"))
             self.capture_notice.setStyleSheet(
@@ -667,7 +693,8 @@ class SettingsDialog(RoundedDialog):
             render(account) if account is not None else tr("account.signed_out")
         )
         logged_in = account is not None
-        self._logged_in = logged_in
+        if logged_in:
+            self._auth_required = False
         self._update_capture_notice()
         self.logout.setVisible(logged_in)
         self.login.setVisible(not logged_in)
@@ -706,13 +733,12 @@ class SettingsDialog(RoundedDialog):
         )
         capture_info = value[5] if len(value) > 5 else {}
         self._update_capture_notice(capture_info.get("auth_required"))
+        if "stations" in capture_info:
+            self._set_stations(*capture_info["stations"], capture_info.get("station_playing", ()))
         device = capture_info.get("device") or tr("playback.device_waiting")
         description = tr("playback.device", device=device) if ynison else tr("search.description")
-        if ynison and capture_info.get("pause_corrected"):
-            description += tr("playback.pause_corrected")
         self.search_description.setText(description)
         self.search_description.setVisible(ynison)
-        self.ynison_idle_notice.setVisible(ynison and state == "idle")
         source_states = dict(value[3]) if len(value) > 3 else {}
         statuses = {
             "unused": (tr("search.unused"), "#9898a3"),
@@ -780,23 +806,24 @@ class SettingsDialog(RoundedDialog):
         album = payload.get("large_text", "")
         self.track_album.setText(album)
         self.track_title.setToolTip(album)
-        source = f"{media.source}  ·  " if media else ""
-        source += (
-            (
-                tr("playback.direct")
-                if state == "direct"
-                else tr("playback.verified", source=track.source)
+        if ynison:
+            source = ("Yandex Glagol" if capture_info.get("station") else "Yandex Ynison") if media else ""
+            if capture_info.get("pause_corrected"):
+                source += " · " + tr("playback.pause_corrected")
+        else:
+            source = f"{media.source}  ·  " if media else ""
+            source += (
+                tr("playback.verified", source=track.source)
+                if track
+                else {
+                    "searching": tr("playback.searching"),
+                    "not_found": tr("playback.not_found"),
+                    "unavailable": tr("playback.unavailable"),
+                    "idle": "",
+                }.get(state, "")
             )
-            if track
-            else {
-                "searching": tr("playback.searching"),
-                "not_found": tr("playback.not_found"),
-                "unavailable": tr("playback.unavailable"),
-                "idle": "",
-            }.get(state, "")
-        )
-        if track and len(value) > 4 and value[4]:
-            source += ("\n" if source else "") + render(value[4])
+            if track and len(value) > 4 and value[4]:
+                source += ("\n" if source else "") + render(value[4])
         self.track_source.setText(source)
         self.track_source.setVisible(bool(source))
         self.track_link.setEnabled(
@@ -864,11 +891,83 @@ class SettingsDialog(RoundedDialog):
     def _show_account_info(self):
         MessageDialog(self, tr("account.why_title"), tr("account.help"), rich_text=True).exec()
 
+    def _set_stations(self, devices, state, playing=()):
+        self.station_hint.setText(tr("stations." + state))
+        self.station_hint.setVisible(state != "ready")
+        self.station_network_hint.setVisible(
+            self.show_stations.isChecked() and state != "auth_required"
+        )
+        if devices != self._station_devices:
+            self._station_devices = devices
+            for _toggle, container in self._station_widgets.values():
+                self.station_rows.removeWidget(container)
+                container.deleteLater()
+            self._station_widgets.clear()
+            self._station_badges.clear()
+            preferences = {p.device_id: p for p in self.config.settings.stations}
+            for index, device in enumerate(devices):
+                pref = preferences.get(device.device_id, StationPreference(device.device_id))
+                container = QWidget()
+                layout = QVBoxLayout(container)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(10)
+                if index:
+                    self._divider(layout)
+                row = QHBoxLayout()
+                row.setContentsMargins(0, 10, 0, 10)
+                row.setSpacing(14)
+                icon = IconLabel(QIcon(str(resource_path("station.svg"))), 42)
+                icon.setFixedSize(44, 44)
+                row.addWidget(icon)
+                text = QVBoxLayout()
+                text.setSpacing(5)
+                title_row = QHBoxLayout()
+                title_row.setSpacing(12)
+                name = self._label(device.name, "stationName")
+                name.setTextFormat(Qt.TextFormat.PlainText)
+                title_row.addWidget(name)
+                badge = QWidget()
+                badge_layout = QHBoxLayout(badge)
+                badge_layout.setContentsMargins(0, 0, 0, 0)
+                badge_layout.setSpacing(5)
+                bars = IconLabel(QIcon(str(resource_path("equalizer.svg"))), 16)
+                bars.setFixedSize(16, 16)
+                badge_layout.addWidget(bars)
+                badge_layout.addWidget(self._translated_label("stations.playing", "stationPlaying"))
+                title_row.addWidget(badge)
+                title_row.addStretch()
+                text.addLayout(title_row)
+                details = " · ".join(v for v in (device.room, device.model) if v)
+                if details:
+                    detail_label = self._label(details, "muted")
+                    detail_label.setTextFormat(Qt.TextFormat.PlainText)
+                    text.addWidget(detail_label)
+                row.addLayout(text, 1)
+                toggle = ToggleSwitch()
+                toggle.setAccessibleName(device.name)
+                toggle.setChecked(pref.enabled)
+                row.addWidget(toggle)
+                layout.addLayout(row)
+                self.station_rows.addWidget(container)
+                self._station_widgets[device.device_id] = (toggle, container)
+                self._station_badges[device.device_id] = badge
+                toggle.toggled.connect(self._save)
+        for device_id, badge in self._station_badges.items():
+            badge.setVisible(device_id in playing and self._station_widgets[device_id][0].isChecked())
+
+    def _station_preferences(self):
+        preferences = {p.device_id: p for p in self.config.settings.stations}
+        for device_id, (toggle, _) in self._station_widgets.items():
+            preferences[device_id] = StationPreference(device_id, toggle.isChecked())
+        return tuple(sorted(preferences.values(), key=lambda p: p.device_id))
+
     def _form_settings(self) -> Settings:
         return Settings(
             app_language=Language(self.app_language.currentData()),
             capture_mode=CaptureMode(self.capture_mode.currentData()),
             fix_ynison_pause=self.fix_pause.isChecked(),
+            show_stations=self.show_stations.isChecked(),
+            stations=self._station_preferences(),
             activity_type=ActivityType(self.activity_type.currentData()),
             language=Language(self.language.currentData()),
             buttons=Buttons(self.buttons.currentData()),
@@ -890,6 +989,9 @@ class SettingsDialog(RoundedDialog):
         except (OSError, ValueError) as error:
             show_message(self, tr("settings.save_failed"), str(error))
             return
+        if settings.capture_mode != previous.capture_mode:
+            self._track = (None, None, "idle")
+            self._status = message("status.waiting")
         if settings.app_language != previous.app_language:
             set_language(settings.app_language)
             retranslate(self)

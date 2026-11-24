@@ -29,6 +29,7 @@ class TrayController:
         self.auth_dialog = None
         self._quitting = False
         self._track = (None, None, "idle")
+        self._capture_mode = config.settings.capture_mode
         self._discord_profile = {"connected": False}
         self._auth_busy = False
         self.worker = PresenceWorker(config)
@@ -102,6 +103,10 @@ class TrayController:
 
     def _settings_saved(self):
         retranslate(self.menu)
+        if self._capture_mode != self.config.settings.capture_mode:
+            self._capture_mode = self.config.settings.capture_mode
+            self._track_changed((None, None, "idle"))
+            self._status_text = message("status.waiting")
         self._status_changed(self._status_text)
         self.worker.refresh()
 
@@ -211,6 +216,10 @@ class TrayController:
             self.settings_dialog.set_discord_profile(profile)
 
     def _track_changed(self, value):
+        capture_info = value[5] if len(value) > 5 else {}
+        mode = capture_info.get("capture_mode", self.config.settings.capture_mode)
+        if mode != self.config.settings.capture_mode:
+            return
         self._track = value
         if self.settings_dialog:
             self.settings_dialog.set_track(value)

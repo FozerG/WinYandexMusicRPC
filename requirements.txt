@@ -15,3 +15,4 @@ winrt-Windows.Media.Control==3.2.1; sys_platform == "win32"
 winrt-Windows.Storage.Streams==3.2.1; sys_platform == "win32"
 websockets==16.1.1
 betterproto==2.0.0b7
+zeroconf==0.154.0

@@ -15,6 +15,7 @@ from .media import WindowsMediaSource
 from .models import CaptureMode, Track
 from .presence import PlaybackState, PresenceGrace, build_payload, client_id
 from .search import UNUSED_SOURCES, TrackResolver
+from .stations import StationSources
 from .tokens import TokenStore
 from .version_check import latest_release
 from .yandex import account_avatar
@@ -35,6 +36,7 @@ class PresenceWorker(QThread):
     def __init__(self, config: ConfigStore, parent=None):
         super().__init__(parent)
         self.config = config
+        self._station_playing = ()
         self._ynison_token = None
         self._stop = Event()
         self._wake = Event()
@@ -72,6 +74,7 @@ class PresenceWorker(QThread):
             and self.config.settings.show_unknown_cover
         ))
         ynison = YnisonSource()
+        stations = StationSources()
         resolver = TrackResolver()
         discord = DiscordConnection(profile_changed=self.discord_profile_changed.emit)
         playback = PlaybackState()
@@ -98,7 +101,12 @@ class PresenceWorker(QThread):
                 if settings != previous_settings:
                     grace = PresenceGrace()
                     if settings.capture_mode != previous_settings.capture_mode:
+                        self.track_changed.emit(
+                            (None, None, "idle", (), "", {"capture_mode": settings.capture_mode})
+                        )
+                        self.status_changed.emit(message("status.waiting"))
                         media_loop.run_until_complete(ynison.close())
+                        media_loop.run_until_complete(stations.close())
                         discord.publish(client_id(settings), None)
                         playback = PlaybackState()
                         confirmed = None
@@ -114,6 +122,11 @@ class PresenceWorker(QThread):
                         result = media_loop.run_until_complete(ynison.read(self._ynison_token))
                         if settings.fix_ynison_pause:
                             result = media_loop.run_until_complete(correct_pause(result, source))
+                        result = media_loop.run_until_complete(
+                            stations.read(self._ynison_token, settings, result)
+                        )
+                        self._station_info = (stations.devices, stations.state)
+                        self._station_playing = stations.playing_devices
                         corrected = result.media.identity if result.pause_corrected else None
                         if corrected and corrected != last_corrected:
                             logger.info(
@@ -267,7 +280,7 @@ class PresenceWorker(QThread):
                     self.status_changed.emit(status)
                     self.track_changed.emit(
                         (media, track, search_state, source_states, ignored_info,
-                         {"cover": cover_result})
+                         {"cover": cover_result, "capture_mode": settings.capture_mode})
                     )
                     last_error = None
                 except Exception as error:
@@ -284,7 +297,9 @@ class PresenceWorker(QThread):
                     playback.visible(None, settings.pause_timeout, time.monotonic())
                     discord.publish(client_id(settings), None)
                     self.status_changed.emit(message("status.media_unavailable"))
-                    self.track_changed.emit((None, None, "unavailable"))
+                    self.track_changed.emit(
+                        (None, None, "unavailable", (), "", {"capture_mode": settings.capture_mode})
+                    )
                 finally:
                     if source.session_ids != session_ids:
                         session_ids = source.session_ids
@@ -294,6 +309,7 @@ class PresenceWorker(QThread):
             covers.close()
             media_loop.run_until_complete(source.close())
             media_loop.run_until_complete(ynison.close())
+            media_loop.run_until_complete(stations.close())
             discord.close()
             resolver.close()
             media_loop.run_until_complete(media_loop.shutdown_asyncgens())
@@ -328,7 +344,11 @@ class PresenceWorker(QThread):
                 UNUSED_SOURCES,
                 "",
                 {
+                    "capture_mode": settings.capture_mode,
                     "device": result.device_name,
+                    "station": result.station,
+                    "stations": self._station_info,
+                    "station_playing": self._station_playing,
                     "pause_corrected": result.pause_corrected,
                     "auth_required": result.state == "auth_required",
                 },

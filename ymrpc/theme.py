@@ -26,6 +26,8 @@ QLabel#serviceIcon { background: #303030; border-radius: 14px; }
 QLabel#warning { background: #30291c; color: #efd497; border: none; border-radius: 12px; padding: 14px; }
 QLabel#errorNotice { background: #351e22; color: #ffb4ba; border: none; border-radius: 12px; padding: 14px; }
 QFrame#card { background: #272727; border: none; border-radius: 16px; }
+QLabel#stationName { font-size: 16px; }
+QLabel#stationPlaying { color: #9dd9ad; font-size: 12px; }
 QListWidget { background: transparent; border: none; outline: none; }
 QPushButton, QComboBox, QSpinBox { background: #303030; border: none; border-radius: 9px;
     padding: 8px 14px; min-height: 22px; font-size: 14px; }

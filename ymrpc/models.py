@@ -42,9 +42,17 @@ class PlaybackStatus(IntEnum):
 
 
 @dataclass(frozen=True)
+class StationPreference:
+    device_id: str
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class Settings:
     capture_mode: CaptureMode = CaptureMode.WINDOWS
     fix_ynison_pause: bool = False
+    show_stations: bool = False
+    stations: tuple[StationPreference, ...] = ()
     activity_type: ActivityType = ActivityType.LISTENING
     buttons: Buttons = Buttons.BOTH
     language: Language = Language.RUSSIAN

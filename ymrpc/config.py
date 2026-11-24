@@ -1,4 +1,5 @@
 import configparser
+import json
 import logging
 import os
 import tempfile
@@ -7,7 +8,15 @@ from threading import RLock
 
 from .constants import APP_NAME
 from .i18n import system_language
-from .models import ActivityType, Buttons, CaptureMode, DisplayFormat, Language, Settings
+from .models import (
+    ActivityType,
+    Buttons,
+    CaptureMode,
+    DisplayFormat,
+    Language,
+    Settings,
+    StationPreference,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +74,19 @@ class ConfigStore:
                 last_timeout = 300
         except ValueError:
             last_timeout = 300
+        try:
+            stations = tuple(
+                StationPreference(str(item["device_id"]), item.get("enabled", True) is not False)
+                for item in json.loads(section.get("stations", "[]"))
+                if isinstance(item, dict) and item.get("device_id")
+            )
+        except (ValueError, TypeError):
+            stations = ()
         return Settings(
             app_language=enum_value("app_language", Language, system_language()),
             capture_mode=enum_value("capture_mode", CaptureMode, CaptureMode.WINDOWS),
+            show_stations=str(section.get("show_stations", "False")).lower() == "true",
+            stations=stations,
             fix_ynison_pause=str(section.get("fix_ynison_pause", "False")).lower() == "true",
             activity_type=enum_value("activity_type", ActivityType, ActivityType.LISTENING),
             buttons=enum_value("buttons_settings", Buttons, Buttons.BOTH),
@@ -98,6 +117,11 @@ class ConfigStore:
             parser["UserSettings"].update(
                 {
                     "capture_mode": settings.capture_mode.name,
+                    "show_stations": str(settings.show_stations),
+                    "stations": json.dumps([
+                        {"device_id": p.device_id, "enabled": p.enabled}
+                        for p in settings.stations
+                    ], ensure_ascii=False),
                     "fix_ynison_pause": str(settings.fix_ynison_pause),
                     "activity_type": settings.activity_type.name,
                     "buttons_settings": settings.buttons.name,
