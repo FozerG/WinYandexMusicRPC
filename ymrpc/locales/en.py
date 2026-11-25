@@ -53,6 +53,7 @@ STRINGS = {
     "uploads.rate_limited": "!  Rate limited",
     "discord.connected": "Connected",
     "discord.disconnected": "Disconnected",
+    "discord.access_denied_hint": "Discord may be running as administrator. Restart it without elevated privileges or run WinYandexMusicRPC as administrator.",
     "discord.offline_hint": "Open Discord on this computer",
     "discord.profile_missing": "Discord did not provide profile details",
     "app.autostart_hint": "Start automatically when you sign in",

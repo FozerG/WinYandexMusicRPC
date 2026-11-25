@@ -268,6 +268,9 @@ class SettingsDialog(RoundedDialog):
         self.discord_state = self._label("", "status")
         discord_row.addWidget(self.discord_state)
         overview.addWidget(discord_card)
+        self.discord_warning = self._label("", "warning")
+        self.discord_warning.setWordWrap(True)
+        overview.addWidget(self.discord_warning)
         self._discord_profile = {}
         self.set_discord_profile({"connected": False})
 
@@ -864,6 +867,9 @@ class SettingsDialog(RoundedDialog):
 
         self._discord_profile = profile
         connected = profile.get("connected", False)
+        access_denied = not connected and profile.get("reason") == "access_denied"
+        self.discord_warning.setText(tr("discord.access_denied_hint") if access_denied else "")
+        self.discord_warning.setVisible(access_denied)
         username = profile.get("username") or ""
         self.discord_name.setText(profile.get("global_name") or username or "Discord")
         self.discord_username.setText(
@@ -874,7 +880,8 @@ class SettingsDialog(RoundedDialog):
         self.discord_state.setText(
             "●  " + tr("discord.connected" if connected else "discord.disconnected")
         )
-        self.discord_state.setStyleSheet("color: #9dd9ad;" if connected else "color: #a8a8af;")
+        color = "#9dd9ad" if connected else "#f0c674" if access_denied else "#a8a8af"
+        self.discord_state.setStyleSheet(f"color: {color};")
         user_id, avatar = str(profile.get("id") or ""), str(profile.get("avatar") or "")
         url = None
         if connected and user_id.isdigit() and re.fullmatch(r"(?:a_)?[a-fA-F0-9]+", avatar):

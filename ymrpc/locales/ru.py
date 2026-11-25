@@ -53,6 +53,7 @@ STRINGS = {
     "uploads.rate_limited": "!  Лимит запросов",
     "discord.connected": "Подключён",
     "discord.disconnected": "Не подключён",
+    "discord.access_denied_hint": "Возможно, Discord запущен от имени администратора. Перезапустите его без повышения прав или запустите WinYandexMusicRPC от имени администратора.",
     "discord.offline_hint": "Откройте Discord на компьютере",
     "discord.profile_missing": "Discord не передал данные профиля",
     "app.autostart_hint": "Автоматический запуск при входе в систему",

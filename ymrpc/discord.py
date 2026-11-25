@@ -78,8 +78,12 @@ class DiscordConnection:
             self._last_payload = payload
             return True
         except Exception as error:
-            logger.warning("Discord unavailable (%s); retrying in 5 seconds", type(error).__name__)
-            self.close()
+            access_denied = isinstance(error, PermissionError) or getattr(error, "winerror", None) == 5
+            logger.warning(
+                "Discord unavailable (%s, winerror=%s); retrying in 5 seconds",
+                type(error).__name__, getattr(error, "winerror", None),
+            )
+            self.close(reason="access_denied" if access_denied else None)
             self._retry_at = now + 5
             return False
 
@@ -97,10 +101,13 @@ class DiscordConnection:
             for key in ("start", "end")
         )
 
-    def close(self) -> None:
+    def close(self, *, reason: str | None = None) -> None:
         rpc, loop = self._rpc, self._loop
         self._rpc = self._loop = self._last_payload = None
-        self._profile_changed({"connected": False})
+        profile = {"connected": False}
+        if reason:
+            profile["reason"] = reason
+        self._profile_changed(profile)
         try:
             if rpc is not None and rpc.sock_writer is not None:
                 rpc.sock_writer.close()
